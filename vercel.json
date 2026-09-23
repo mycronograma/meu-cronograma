@@ -1,0 +1,11 @@
+{
+  "framework": "nextjs",
+  "installCommand": "npm install",
+  "buildCommand": "npm run vercel-build",
+  "crons": [
+    {
+      "path": "/api/notifications/dispatch",
+      "schedule": "0 12 * * *"
+    }
+  ]
+}
