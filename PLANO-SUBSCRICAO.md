@@ -39,6 +39,21 @@ principalmente (a) dado do aluno no servidor em formato usável, (b) cobrança +
 
 ---
 
+## 0. Status da execução (atualizado em 24/09/2026)
+
+| Passo | Situação | O que foi feito |
+|---|---|---|
+| **2.1 Progresso no servidor (delta + migração)** | ✅ implementado | `POST/GET /api/sync`, `src/lib/syncDelta.ts` (mesclagem, tombstones, conflito por registro), `src/lib/syncServer.ts` (núcleo da rota), `src/lib/clientSync.ts` (motor do cliente), migração automática do blob antigo, painel em Configurações → Progresso na nuvem, `GET /api/health` para monitoramento. Testes: `npm run test:sync` e `npm run test:sync-client`. |
+| **2.2 Assinatura (modelos + Mercado Pago)** | ⏳ próximo | Gateway escolhido: **Mercado Pago**; manter a abstração `src/lib/billing/provider.ts` para trocar depois. |
+| Demais itens (2.3–2.5 e seção 3) | ⏳ pendentes | — |
+
+Números medidos nos testes: com 1 ano de dados (~2.400 blocos), o mesmo conjunto que iria como
+**1,5 MB de blob** agora sobe em **684 KB de delta** (a cópia da disciplina embutida em cada bloco
+não vai mais no payload) e, sem alterações, cada sincronização fica em **~140 bytes** — o store
+completo de um ano era ~3,3 MB e era reenviado inteiro a cada mudança.
+
+---
+
 ## 2. P0 — bloqueadores técnicos (fazer antes de vender)
 
 ### 2.1 Tirar o progresso do `localStorage` (o item mais importante)
@@ -46,14 +61,16 @@ principalmente (a) dado do aluno no servidor em formato usável, (b) cobrança +
 Estratégia em 3 passos, sem parar o app:
 
 1. **Espelhar no banco:** passar a gravar `StudyBlock`, `StudySession`, `Subject` e `XpEvent` reais
-   (as tabelas já existem no schema) via rotas incrementais:
-   `POST/PATCH /api/blocks`, `POST /api/sessions`, `POST /api/subjects`.
+   (as tabelas já existem no schema) via rotas incrementais.
    O `localStorage` continua sendo o estado da UI (offline-first), mas o servidor é a fonte da verdade.
+   ✅ Resolvido no formato de delta único (`POST /api/sync`) em vez de rotas por recurso: um só
+   round-trip envia o que mudou nos blocos, disciplinas e sessões.
 2. **Migração preguiçosa:** ao logar, se existe `UserProgressSnapshot.payload`, converter o blob em
-   linhas e marcar como migrado. Depois de ~30 dias, desligar a leitura do blob.
+   linhas e marcar como migrado. ✅ `migrateProgressSnapshot()` roda na primeira sincronização,
+   é idempotente e mantém no snapshot só o que ainda não virou tabela (analytics, preferências, XP).
 3. **Sync incremental:** trocar `PUT /api/progress` (blob inteiro) por *delta* com `updatedAt` e
-   resolução "last write wins por bloco" + `id` estável (cuid no cliente). Isso resolve
-   multi-dispositivo e derruba o payload de ~3 MB para alguns KB.
+   resolução "last write wins por registro" + `id` estável (cuid no cliente). ✅ Feito, com
+   tombstones para exclusões e devolução dos registros que perderam o conflito.
 
 Ganhos colaterais: analytics agregado por usuário, base para limites de plano, relatórios por e-mail,
 suporte consegue ver o cronograma do aluno, e backup profissional.

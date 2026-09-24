@@ -314,6 +314,8 @@ Sistema inteligente que cria uma trilha pedagógica progressiva:
 | `npm run test:backlog` | Testes do reencaixe de backlog |
 | `npm run test:gamification` | Testes de XP, níveis e conquistas |
 | `npm run test:year-simulation` | Simulação determinística de 1 ano de uso |
+| `npm run test:sync` | Sincronização no servidor (conflitos, tombstones, migração) |
+| `npm run test:sync-client` | Ponta a ponta celular ↔ computador (motor do cliente + API) |
 
 ## 📡 API Endpoints
 
@@ -401,6 +403,34 @@ CMD ["npm", "start"]
 2. Confirmar que não há 3 blocos seguidos da mesma matéria.
 3. Conferir inserção de revisões 24h / 7d / 30d.
 4. Matérias de maior peso aparecem mais vezes na semana.
+
+## 🔄 Progresso sincronizado (delta)
+
+O progresso do estudante vive no `localStorage`, mas com conta logada ele também é
+gravado por linha no banco (`Subject`, `StudyBlock`, `StudySession`) e sincronizado
+entre aparelhos:
+
+- **delta**: só o que mudou sobe para o servidor (impressão digital por registro),
+  em vez de enviar o bloco JSON inteiro — o que era ~3 MB depois de um ano de uso;
+- **tombstones**: apagar uma disciplina/bloco em um aparelho apaga no outro
+  (`deletedAt`), sem "ressuscitar" dados;
+- **conflito por registro**: cada alteração carrega a marca de tempo do aparelho
+  (`clientUpdatedAt`); a mais nova vence e o aparelho que perdeu recebe de volta a
+  versão vencedora (`rejected`), então as duas telas convergem;
+- **migração automática**: contas que só têm o blob antigo em
+  `UserProgressSnapshot` viram linhas na primeira sincronização;
+- **o que ainda não virou tabela** (analytics, preferências, XP) continua num
+  snapshot JSON, mas só é enviado quando muda.
+
+Endpoints: `POST /api/sync` (envia o delta e devolve o do servidor) e
+`GET /api/sync` (leitura por cursor). `PUT /api/progress` continua existindo para
+versões antigas do app. O motor do cliente está em `src/lib/clientSync.ts`, a
+mesclagem no servidor em `src/lib/syncDelta.ts` e o núcleo da rota em
+`src/lib/syncServer.ts` — os dois últimos são cobertos por testes sem banco
+(`npm run test:sync` e `npm run test:sync-client`).
+
+Em **modo demo** (sem sessão) nada é enviado ao servidor: o progresso fica no
+navegador.
 
 ## 🧪 Simulação de 1 ano
 

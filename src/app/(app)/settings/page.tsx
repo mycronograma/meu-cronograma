@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   Save,
   RefreshCw,
+  UploadCloud,
   LogOut,
   Trash2,
   RotateCcw,
@@ -35,8 +36,13 @@ import TimePickerField from '@/components/settings/TimePickerField';
 import SystemNotificationsCard from '@/components/settings/SystemNotificationsCard';
 import { useIsMobile, useOnboarding, useLocalStorage } from '@/hooks';
 import { clearClientStoreKeys } from '@/hooks/useLocalStorage';
-import { SERVER_PROGRESS_STORE_KEYS } from '@/hooks/useServerProgressSync';
-import { cn, formatHoursDuration } from '@/lib/utils';
+import {
+  SERVER_PROGRESS_STORE_KEYS,
+  SYNC_STATUS_STORAGE_KEY,
+  type StoredSyncStatus,
+} from '@/hooks/useServerProgressSync';
+import { resetSyncState, syncNow } from '@/lib/clientSync';
+import { cn, formatDate, formatHoursDuration } from '@/lib/utils';
 import { getAiScheduleProfile } from '@/lib/aiScheduleProfiles';
 import type { DailyHoursByWeekday, StudyPreferences, UserSettings, WeekdayKey } from '@/types';
 import { defaultSettings } from '@/lib/defaultSettings';
@@ -213,6 +219,9 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [hasRemotePrefs, setHasRemotePrefs] = useState(false);
+  const [syncStatus] = useLocalStorage<StoredSyncStatus | null>(SYNC_STATUS_STORAGE_KEY, null);
+  const [isSyncingNow, setIsSyncingNow] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const hasAttemptedRemotePrefs = useRef(false);
   const [pendingAlarmSound, setPendingAlarmSound] = useState<UserSettings['alarmSound']>(
     settings.alarmSound || 'pulse'
@@ -868,6 +877,32 @@ export default function SettingsPage() {
 
   const clearClientProgressStore = () => {
     clearClientStoreKeys(SERVER_PROGRESS_STORE_KEYS);
+    // Sem isto, o aparelho continuaria achando que já enviou o que foi apagado.
+    resetSyncState();
+  };
+
+  const handleSyncNow = async () => {
+    setIsSyncingNow(true);
+    setSyncFeedback(null);
+
+    try {
+      const result = await syncNow({ force: true });
+      if (!result.ok) {
+        setSyncFeedback(result.error ?? 'Não foi possível sincronizar agora.');
+      } else if (result.skipped) {
+        setSyncFeedback('Tudo já estava sincronizado.');
+      } else {
+        const sent = result.pushed.subjects + result.pushed.blocks + result.pushed.snapshots;
+        const received = result.pulled.subjects + result.pulled.blocks + result.pulled.sessions;
+        setSyncFeedback(
+          `Sincronizado: ${sent} enviado(s), ${received} recebido(s) — ${(
+            result.bytesUp / 1024
+          ).toFixed(1)} KB.`
+        );
+      }
+    } finally {
+      setIsSyncingNow(false);
+    }
   };
 
   const clearServerProgress = async (mode: 'onboarding' | 'progress') => {
@@ -1971,6 +2006,67 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+      </Card>
+
+      {/* Progresso na nuvem */}
+      <Card className={cn(activeSection === 'study' ? 'block' : 'hidden')}>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/25 flex items-center justify-center">
+            <UploadCloud className="w-5 h-5 text-cyan-300" />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-lg font-heading font-bold text-white">Progresso na nuvem</h2>
+            <p className="text-sm text-text-secondary">
+              Envia só o que mudou e mantém celular e computador iguais
+            </p>
+          </div>
+        </div>
+
+        {isLocalDemoAuthEnabled ? (
+          <p className="text-xs sm:text-sm text-text-secondary">
+            No modo demo o progresso fica apenas neste navegador. Entre com uma conta para
+            sincronizar entre aparelhos.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-slate-700/60 bg-slate-900/40 p-3 text-xs sm:text-sm text-text-secondary">
+              {syncStatus?.at ? (
+                <>
+                  Última sincronização:{' '}
+                  <span className="text-white">
+                    {formatDate(new Date(syncStatus.at), 'short')} às{' '}
+                    {new Date(syncStatus.at).toLocaleTimeString('pt-BR', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                  {typeof syncStatus.bytesUp === 'number' && (
+                    <> · {((syncStatus.bytesUp ?? 0) / 1024).toFixed(1)} KB enviados</>
+                  )}
+                  {syncStatus.ok === false && (
+                    <span className="block text-amber-300 mt-1">
+                      {syncStatus.error ?? 'Última tentativa falhou.'}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>Ainda não sincronizou nesta sessão. O envio acontece sozinho a cada alteração.</>
+              )}
+            </div>
+
+            <Button
+              variant="secondary"
+              className="w-full border-cyan-500/35 text-cyan-200 hover:bg-cyan-500/10"
+              onClick={handleSyncNow}
+              loading={isSyncingNow}
+              leftIcon={<RefreshCw className="w-4 h-4" />}
+            >
+              Sincronizar agora
+            </Button>
+
+            {syncFeedback && <p className="text-xs text-text-secondary">{syncFeedback}</p>}
+          </div>
+        )}
       </Card>
 
       {/* Zona de Perigo */}

@@ -1,31 +1,35 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSession } from 'next-auth/react';
-import {
-  LOCAL_STORAGE_SYNC_EVENT,
-  getClientStoreSnapshot,
-  setClientStoreEntries,
-} from './useLocalStorage';
+/**
+ * Mantém o progresso do estudante sincronizado com o servidor.
+ *
+ * Desde a migração para sincronização incremental este hook é fino: quem decide
+ * o que enviar é `src/lib/clientSync.ts` (delta por registro + tombstones).
+ * Aqui cuidamos só do ciclo de vida:
+ *  - dispara a primeira sincronização ao entrar (puxa o que existe na conta);
+ *  - reagrupa alterações do app (debounce) e envia o delta;
+ *  - revalida ao voltar para a aba (celular ↔ computador);
+ *  - em modo demo não chama o servidor (não há sessão).
+ */
 
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useSession } from 'next-auth/react';
+import { useLocalStorage, LOCAL_STORAGE_SYNC_EVENT } from './useLocalStorage';
+import { ROW_STORE_KEYS, SNAPSHOT_STORE_KEYS, syncNow, type SyncStats } from '@/lib/clientSync';
+
+/** Todas as chaves que fazem parte do progresso do usuário. */
 export const SERVER_PROGRESS_STORE_KEYS = [
-  'nexora_subjects',
-  'nexora_planner_blocks',
-  'nexora_analytics',
-  'nexora_study_prefs',
-  'nexora_user_settings',
-  'nexora_schedule_range',
-  'nexora_daily_limits',
-  'nexora_first_cycle_all_subjects',
-  'nexora_onboarding',
-  'nexora_session_timers',
-  'nexora_backlog_last_auto_run_day',
-  'nexora_xp_events',
-  'nexora_unlocked_achievements',
+  ...ROW_STORE_KEYS,
+  ...SNAPSHOT_STORE_KEYS,
 ] as const;
 
-type ServerProgressStoreKey = (typeof SERVER_PROGRESS_STORE_KEYS)[number];
-type ServerProgressPayload = Partial<Record<ServerProgressStoreKey, unknown>>;
+export const SYNC_STATUS_STORAGE_KEY = 'nexora_sync_status';
+
+const SYNC_DEBOUNCE_MS = 1200;
+/** Revalidação periódica enquanto a aba está aberta. */
+const SYNC_INTERVAL_MS = 120_000;
+
+const serverProgressKeySet = new Set<string>(SERVER_PROGRESS_STORE_KEYS);
 
 type StoreSyncEventDetail = {
   key: string;
@@ -33,213 +37,93 @@ type StoreSyncEventDetail = {
   hasValue: boolean;
 };
 
-const serverProgressKeySet = new Set<string>(SERVER_PROGRESS_STORE_KEYS);
-
-const LEGACY_KEY_MAP: Record<string, ServerProgressStoreKey> = {
-  subjects: 'nexora_subjects',
-  plannerBlocks: 'nexora_planner_blocks',
-  analytics: 'nexora_analytics',
-  studyPrefs: 'nexora_study_prefs',
-  userSettings: 'nexora_user_settings',
-  scheduleRange: 'nexora_schedule_range',
-  dailyLimits: 'nexora_daily_limits',
-  firstCycleAllSubjects: 'nexora_first_cycle_all_subjects',
-  onboarding: 'nexora_onboarding',
-  sessionTimers: 'nexora_session_timers',
-  lastBacklogAutoRunDay: 'nexora_backlog_last_auto_run_day',
-  xpEvents: 'nexora_xp_events',
-  unlockedAchievements: 'nexora_unlocked_achievements',
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-};
-
-const isStoreKey = (value: string): value is ServerProgressStoreKey => {
-  return serverProgressKeySet.has(value);
-};
-
-const isEmptyValue = (value: unknown) => {
-  if (value == null) return true;
-  if (Array.isArray(value)) return value.length === 0;
-  if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length === 0;
-  if (typeof value === 'string') return value.length === 0;
-  return false;
-};
-
-const normalizePayload = (value: unknown): ServerProgressPayload => {
-  if (!isRecord(value)) return {};
-
-  const normalized: ServerProgressPayload = {};
-
-  for (const [rawKey, rawValue] of Object.entries(value)) {
-    if (isStoreKey(rawKey)) {
-      normalized[rawKey] = rawValue;
-      continue;
-    }
-
-    const mappedKey = LEGACY_KEY_MAP[rawKey];
-    if (mappedKey) {
-      normalized[mappedKey] = rawValue;
-    }
-  }
-
-  return normalized;
-};
+export interface StoredSyncStatus {
+  ok: boolean;
+  at: string;
+  bytesUp: number;
+  bytesDown: number;
+  pushed: number;
+  pulled: number;
+  error?: string;
+}
 
 export function useServerProgressSync() {
   const { status } = useSession();
-  const [isReadyToSync, setIsReadyToSync] = useState(false);
+  const [storedStatus, setStoredStatus] = useLocalStorage<StoredSyncStatus | null>(
+    SYNC_STATUS_STORAGE_KEY,
+    null
+  );
 
   const applyingRemoteRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const saveInFlightRef = useRef(false);
-  const queuedSaveRef = useRef<{ payload: ServerProgressPayload; hash: string } | null>(null);
-  const lastSavedHashRef = useRef('');
+  const inFlightRef = useRef<Promise<void> | null>(null);
+  const isAuthenticated = status === 'authenticated';
 
-  const buildPayload = useCallback((): ServerProgressPayload => {
-    return getClientStoreSnapshot(SERVER_PROGRESS_STORE_KEYS) as ServerProgressPayload;
-  }, []);
+  const runSync = useCallback(
+    async (options: { force?: boolean } = {}) => {
+      if (!isAuthenticated) return;
+      if (inFlightRef.current) return inFlightRef.current;
 
-  const persist = useCallback(async (nextPayload: ServerProgressPayload, hash: string) => {
-    if (saveInFlightRef.current) {
-      queuedSaveRef.current = { payload: nextPayload, hash };
-      return;
-    }
-
-    saveInFlightRef.current = true;
-
-    try {
-      const response = await fetch('/api/progress', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: nextPayload }),
-      });
-
-      const result = await response.json().catch(() => null);
-      if (!response.ok || result?.success === false) {
-        throw new Error(result?.error || 'Falha ao sincronizar progresso.');
-      }
-
-      lastSavedHashRef.current = hash;
-    } catch (error) {
-      console.warn('Falha ao sincronizar progresso no servidor:', error);
-    } finally {
-      saveInFlightRef.current = false;
-
-      const queued = queuedSaveRef.current;
-      queuedSaveRef.current = null;
-
-      if (queued && queued.hash !== lastSavedHashRef.current) {
-        void persist(queued.payload, queued.hash);
-      }
-    }
-  }, []);
-
-  const schedulePersist = useCallback(() => {
-    const payload = buildPayload();
-    if (Object.keys(payload).length === 0) return;
-
-    const hash = JSON.stringify(payload);
-    if (hash === lastSavedHashRef.current) return;
-
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-    }
-
-    saveTimerRef.current = setTimeout(() => {
-      void persist(payload, hash);
-    }, 900);
-  }, [buildPayload, persist]);
-
-  useEffect(() => {
-    if (status !== 'authenticated') {
-      setIsReadyToSync(false);
-      return;
-    }
-
-    let cancelled = false;
-    const controller = new AbortController();
-
-    const loadProgress = async () => {
-      setIsReadyToSync(false);
-
-      try {
-        const response = await fetch('/api/progress', {
-          method: 'GET',
-          cache: 'no-store',
-          signal: controller.signal,
-        });
-
-        if (!response.ok) return;
-
-        const result = await response.json();
-        if (!result?.success || cancelled) return;
-
-        const incoming = normalizePayload(result.data);
-        const source = typeof result.source === 'string' ? result.source : 'unknown';
-        const currentPayload = buildPayload();
-        const entriesToApply: ServerProgressPayload = {};
-
-        for (const key of SERVER_PROGRESS_STORE_KEYS) {
-          if (!(key in incoming)) continue;
-          const incomingValue = incoming[key];
-          if (source === 'snapshot' || isEmptyValue(currentPayload[key])) {
-            entriesToApply[key] = incomingValue;
-          }
-        }
-
+      const task = (async () => {
         applyingRemoteRef.current = true;
-        if (Object.keys(entriesToApply).length > 0) {
-          setClientStoreEntries(entriesToApply as Record<string, unknown>);
-        }
+        try {
+          const result: SyncStats = await syncNow({ force: options.force });
+          const pushed =
+            result.pushed.subjects + result.pushed.blocks + result.pushed.snapshots;
+          const pulled =
+            result.pulled.subjects + result.pulled.blocks + result.pulled.sessions;
 
-        const merged = {
-          ...currentPayload,
-          ...entriesToApply,
-        };
-
-        if (source === 'snapshot') {
-          lastSavedHashRef.current = JSON.stringify(merged);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.warn('Falha ao carregar progresso remoto:', error);
-        }
-      } finally {
-        if (cancelled) return;
-        window.setTimeout(() => {
+          if (!result.skipped) {
+            setStoredStatus({
+              ok: result.ok,
+              at: result.at,
+              bytesUp: result.bytesUp,
+              bytesDown: result.bytesDown,
+              pushed,
+              pulled,
+              error: result.error,
+            });
+          }
+        } finally {
           applyingRemoteRef.current = false;
-          setIsReadyToSync(true);
-        }, 0);
-      }
-    };
+          inFlightRef.current = null;
+        }
+      })();
 
-    void loadProgress();
+      inFlightRef.current = task;
+      await task;
+    },
+    [isAuthenticated, setStoredStatus]
+  );
 
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [buildPayload, status]);
+  const scheduleSync = useCallback(() => {
+    if (!isAuthenticated) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
+      void runSync();
+    }, SYNC_DEBOUNCE_MS);
+  }, [isAuthenticated, runSync]);
 
+  // Primeira sincronização ao entrar: puxa o progresso que estiver na conta.
   useEffect(() => {
-    if (status !== 'authenticated' || !isReadyToSync) {
-      return;
-    }
+    if (!isAuthenticated) return;
+    void runSync({ force: true });
+  }, [isAuthenticated, runSync]);
+
+  // Alterações do app entram no próximo lote.
+  useEffect(() => {
+    if (!isAuthenticated) return;
 
     const handleStoreSync = (event: Event) => {
       const customEvent = event as CustomEvent<StoreSyncEventDetail>;
       const changedKey = customEvent.detail?.key;
       if (!changedKey || !serverProgressKeySet.has(changedKey)) return;
       if (applyingRemoteRef.current) return;
-      schedulePersist();
+      scheduleSync();
     };
 
     window.addEventListener(LOCAL_STORAGE_SYNC_EVENT, handleStoreSync);
-
-    // Garante criação/atualização do snapshot mesmo sem interação imediata.
-    schedulePersist();
 
     return () => {
       window.removeEventListener(LOCAL_STORAGE_SYNC_EVENT, handleStoreSync);
@@ -248,7 +132,45 @@ export function useServerProgressSync() {
         saveTimerRef.current = null;
       }
     };
-  }, [isReadyToSync, schedulePersist, status]);
+  }, [isAuthenticated, scheduleSync]);
+
+  // Voltar para a aba reflete o que foi feito em outro dispositivo.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') void runSync({ force: true });
+    };
+
+    window.addEventListener('focus', handleVisibility);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      window.removeEventListener('focus', handleVisibility);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [isAuthenticated, runSync]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') void runSync();
+    }, SYNC_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, runSync]);
+
+  // Avisa a interface (ex.: configurações) sempre que o status muda.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !storedStatus) return;
+    window.dispatchEvent(
+      new CustomEvent('nexora-sync-status', { detail: storedStatus })
+    );
+  }, [storedStatus]);
+
+  return useMemo(
+    () => ({ status: storedStatus, syncNow: runSync }),
+    [storedStatus, runSync]
+  );
 }
 
 export default useServerProgressSync;
