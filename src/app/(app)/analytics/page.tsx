@@ -52,6 +52,9 @@ export default function AnalyticsPage() {
   const [subjects] = useLocalStorage<Subject[]>('nexora_subjects', []);
   const [plannerBlocks] = useLocalStorage<StudyBlock[]>('nexora_planner_blocks', []);
   const [mounted, setMounted] = useState(false);
+  // O mapa de calor ficava travado em 12 semanas: quem estuda há meses não
+  // enxergava o próprio histórico. Agora o período é escolhido pelo estudante.
+  const [heatmapWeeks, setHeatmapWeeks] = useState(12);
 
   useEffect(() => {
     setMounted(true);
@@ -145,8 +148,9 @@ export default function AnalyticsPage() {
     if (!now) return [];
     const data: { date: string; hours: number; level: 0 | 1 | 2 | 3 | 4 }[] = [];
     const today = now;
+    const windowDays = heatmapWeeks * 7 - 1;
 
-    for (let i = 84; i >= 0; i--) {
+    for (let i = windowDays; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
       const dateKey = toLocalDateKey(date);
@@ -162,7 +166,39 @@ export default function AnalyticsPage() {
     }
 
     return data;
-  }, [mergedDaily, now]);
+  }, [heatmapWeeks, mergedDaily, now]);
+
+  /**
+   * Horário em que o estudante mais rende: soma as horas concluídas por faixa
+   * horária nos últimos 30 dias (dados reais dos blocos). O card existia com
+   * "-- / Sem dados ainda" fixo no código.
+   */
+  const peakStudyHour = useMemo(() => {
+    if (!now) return null;
+
+    const from = new Date(now);
+    from.setDate(from.getDate() - 30);
+    from.setHours(0, 0, 0, 0);
+
+    const minutesByHour = new Map<number, number>();
+
+    plannerBlocks.forEach((block) => {
+      if (block.isBreak || block.status !== 'completed') return;
+      const blockDate = parseBlockDate(block.date);
+      if (Number.isNaN(blockDate.getTime()) || blockDate < from || blockDate > now) return;
+
+      const startHour = Number((block.startTime || '').split(':')[0]);
+      if (!Number.isFinite(startHour)) return;
+
+      const minutes = Number.isFinite(block.durationMinutes) ? Math.max(0, block.durationMinutes) : 0;
+      minutesByHour.set(startHour, (minutesByHour.get(startHour) ?? 0) + minutes);
+    });
+
+    if (minutesByHour.size === 0) return null;
+
+    const [hour, minutes] = Array.from(minutesByHour.entries()).sort((a, b) => b[1] - a[1])[0];
+    return { hour, hours: minutes / 60, days: Math.round((now.getTime() - from.getTime()) / 86400000) };
+  }, [now, plannerBlocks]);
 
   const weeklySummary = useMemo(() => {
     const weekStart = getWeekStart(now ?? new Date());
@@ -307,8 +343,30 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Mapa de Calor de Atividades */}
-      <motion.div variants={itemVariants} className="min-w-0">
-        <ActivityHeatmap data={heatmapData} weeks={12} />
+      <motion.div variants={itemVariants} className="min-w-0 space-y-3">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className="text-xs text-text-muted">Período do mapa:</span>
+          {[
+            { weeks: 12, label: '12 semanas' },
+            { weeks: 26, label: '6 meses' },
+            { weeks: 52, label: '1 ano' },
+          ].map((option) => (
+            <button
+              key={option.weeks}
+              type="button"
+              onClick={() => setHeatmapWeeks(option.weeks)}
+              aria-pressed={heatmapWeeks === option.weeks}
+              className={
+                heatmapWeeks === option.weeks
+                  ? 'rounded-lg border border-neon-blue/50 bg-neon-blue/15 px-2.5 py-1 text-xs font-medium text-white'
+                  : 'rounded-lg border border-card-border px-2.5 py-1 text-xs text-text-secondary hover:border-neon-blue/40 hover:text-white'
+              }
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <ActivityHeatmap data={heatmapData} weeks={heatmapWeeks} />
       </motion.div>
 
       {/* Seção de Insights */}
@@ -322,10 +380,20 @@ export default function AnalyticsPage() {
             <div className="p-4 max-[479px]:p-3 rounded-xl bg-neon-blue/10 border border-neon-blue/20">
               <div className="flex items-center gap-2 mb-2 max-[479px]:mb-1">
                 <Clock className="w-5 h-5 max-[479px]:w-4 max-[479px]:h-4 text-neon-blue" />
-                <span className="font-medium text-white">Pico de Performance</span>
+                <span className="font-medium text-white">Horário de maior rendimento</span>
               </div>
-              <p className="text-2xl max-[479px]:text-[22px] font-heading font-bold text-neon-blue">--</p>
-              <p className="text-sm max-[479px]:text-xs text-text-secondary mt-1">Sem dados ainda</p>
+              <p className="text-2xl max-[479px]:text-[22px] font-heading font-bold text-neon-blue">
+                {peakStudyHour
+                  ? `${String(peakStudyHour.hour).padStart(2, '0')}h–${String(
+                      (peakStudyHour.hour + 1) % 24
+                    ).padStart(2, '0')}h`
+                  : '--'}
+              </p>
+              <p className="text-sm max-[479px]:text-xs text-text-secondary mt-1">
+                {peakStudyHour
+                  ? `${formatHoursDuration(peakStudyHour.hours)} estudadas nesse horário (30 dias)`
+                  : 'Sem sessões concluídas nos últimos 30 dias'}
+              </p>
             </div>
 
             {/* Melhor Disciplina */}

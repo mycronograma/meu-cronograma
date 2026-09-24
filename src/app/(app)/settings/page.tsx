@@ -218,6 +218,8 @@ export default function SettingsPage() {
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  /** Aviso do botão "Restaurar padrões" (o campo `saveFeedback` é derivado do save). */
+  const [resetNotice, setResetNotice] = useState<string | null>(null);
   const [hasRemotePrefs, setHasRemotePrefs] = useState(false);
   const [syncStatus] = useLocalStorage<StoredSyncStatus | null>(SYNC_STATUS_STORAGE_KEY, null);
   const [isSyncingNow, setIsSyncingNow] = useState(false);
@@ -825,6 +827,7 @@ export default function SettingsPage() {
           setStudyPrefs(nextStudyPrefs);
           setHasChanges(false);
           setSaveState('saved');
+          setResetNotice(null);
         };
 
         setSaveState('saving');
@@ -941,6 +944,9 @@ export default function SettingsPage() {
     });
     setHasChanges(true);
     setSaveState('idle');
+    setResetNotice(
+      'Campos restaurados para o padrão. Clique em "Salvar alterações" para aplicar — nada muda no seu cronograma antes disso.'
+    );
   };
 
   const startResetTutorialFlow = () => {
@@ -1189,13 +1195,22 @@ export default function SettingsPage() {
           <p className="text-sm text-text-secondary mt-1">
             Personalize sua experiência de estudos
           </p>
-          {saveFeedback && <p className={cn('mt-2 text-xs', saveFeedback.className)}>{saveFeedback.text}</p>}
+          {resetNotice ? (
+            <p className="mt-2 text-xs text-amber-200/90">{resetNotice}</p>
+          ) : (
+            saveFeedback && <p className={cn('mt-2 text-xs', saveFeedback.className)}>{saveFeedback.text}</p>
+          )}
         </div>
         {showActionButtons && (
           <div className="flex w-full sm:w-auto flex-col sm:flex-row gap-2 sm:gap-3">
-            <Button variant="ghost" onClick={handleReset} className="w-full sm:w-auto">
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Resetar
+            <Button
+              variant="ghost"
+              onClick={handleReset}
+              className="w-full sm:w-auto"
+              title="Volta os campos desta tela aos valores padrão. Só vale depois de salvar."
+            >
+              <RefreshCw className="w-4 h-4 mr-2" aria-hidden="true" />
+              Restaurar padrões
             </Button>
             <Button variant="primary" onClick={handleSave} loading={saving} className="w-full sm:w-auto">
               <Save className="w-4 h-4 mr-2" />
@@ -2107,7 +2122,7 @@ export default function SettingsPage() {
             loading={isSigningOut}
             leftIcon={<LogOut className="w-4 h-4" />}
           >
-            Sair da Conta
+            Sair da conta
           </Button>
 
           {resetTutorialStep === 'idle' ? (
@@ -2117,11 +2132,13 @@ export default function SettingsPage() {
               onClick={startResetTutorialFlow}
               leftIcon={<RotateCcw className="w-4 h-4" />}
             >
-              Reiniciar Tutorial
+              Reiniciar tutorial
             </Button>
           ) : (
             <div className="rounded-xl border border-orange-500/25 bg-orange-500/[0.06] p-3 space-y-2">
-              <p className="text-xs text-orange-200/80">Etapa 2 de 2: confirmar reinício do tutorial.</p>
+              <p className="text-xs text-orange-200/80">
+                Etapa 2 de 2: o tutorial volta a aparecer no próximo acesso.
+              </p>
               <div className="grid grid-cols-1 gap-2">
                 <Button
                   variant="ghost"
@@ -2137,8 +2154,9 @@ export default function SettingsPage() {
                   onClick={confirmResetTutorial}
                   loading={isResettingTutorial}
                   leftIcon={<RotateCcw className="w-4 h-4" />}
+                  title="Confirmar reinício do tutorial"
                 >
-                  Confirmar
+                  Confirmar reinício
                 </Button>
               </div>
             </div>
@@ -2151,11 +2169,13 @@ export default function SettingsPage() {
               onClick={startResetProgressFlow}
               leftIcon={<RefreshCw className="w-4 h-4" />}
             >
-              Resetar Todo o Progresso
+              Apagar todo o progresso
             </Button>
           ) : (
             <div className="sm:col-span-2 rounded-xl border border-red-500/25 bg-red-500/[0.06] p-3 space-y-2">
-              <p className="text-xs text-red-200/80">Etapa 2 de 2: confirmar reset do progresso.</p>
+              <p className="text-xs text-red-200/80">
+                Etapa 2 de 2: isso apaga XP, sequência, conquistas e histórico de estudos. Não dá para desfazer.
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <Button
                   variant="ghost"
@@ -2171,8 +2191,9 @@ export default function SettingsPage() {
                   onClick={confirmResetProgress}
                   loading={isResettingProgress}
                   leftIcon={<RefreshCw className="w-4 h-4" />}
+                  title="Confirmar apagamento de todo o progresso"
                 >
-                  Confirmar reset
+                  Apagar tudo
                 </Button>
               </div>
             </div>
@@ -2198,14 +2219,17 @@ export default function SettingsPage() {
 
           {deleteStep === 'idle' ? (
             <>
-              <p className="text-xs text-red-200/80">Etapa 1 de 2: iniciar exclusão da conta.</p>
+              <p className="text-xs text-red-200/80">
+                Etapa 1 de 2: remover a conta e todos os dados ligados a ela.
+              </p>
               <Button
                 variant="danger"
                 className="w-full"
                 onClick={startDeleteFlow}
                 leftIcon={<Trash2 className="w-4 h-4" />}
+                title="Começar a exclusão da conta"
               >
-                Iniciar exclusão
+                Excluir minha conta
               </Button>
             </>
           ) : (
@@ -2241,8 +2265,9 @@ export default function SettingsPage() {
                   onClick={handleDeleteAccount}
                   loading={isDeletingAccount}
                   leftIcon={<Trash2 className="w-4 h-4" />}
+                  title="Excluir a conta e todos os dados"
                 >
-                  Confirmar exclusão
+                  Excluir definitivamente
                 </Button>
               </div>
             </>

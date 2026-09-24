@@ -39,6 +39,7 @@ import {
 import { useOnboarding, useLocalStorage } from '@/hooks';
 import { isSameDay, formatDate, formatDuration, formatHoursDuration, getWeekStart, getWeekDates, parseBlockDate } from '@/lib/utils';
 import {
+  buildWeeklyCompletedHoursBySubject,
   buildCompletedHoursByDate,
   buildCompletedSessionsByDate,
   buildMergedDailyStudyData,
@@ -314,24 +315,11 @@ export default function DashboardPage() {
     }, 0);
   }, [analyticsForSummary.daily, completedSessionsByDate]);
 
-  const weeklyCompletedHoursBySubject = useMemo(() => {
-    const weekStart = getWeekStart(new Date());
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 7);
-
-    const totals = new Map<string, number>();
-
-    plannerBlocks.forEach((block) => {
-      if (block.isBreak || block.status !== 'completed' || !block.subjectId) return;
-      const blockDate = parseBlockDate(block.date);
-      if (blockDate < weekStart || blockDate >= weekEnd) return;
-
-      const previous = totals.get(block.subjectId) ?? 0;
-      totals.set(block.subjectId, previous + block.durationMinutes / 60);
-    });
-
-    return totals;
-  }, [plannerBlocks]);
+  // Horas da semana atual por disciplina (mesma base da tela de disciplinas).
+  const weeklyCompletedHoursBySubject = useMemo(
+    () => buildWeeklyCompletedHoursBySubject(plannerBlocks),
+    [plannerBlocks]
+  );
 
   const todayPlan = useMemo(() => {
     const today = new Date();

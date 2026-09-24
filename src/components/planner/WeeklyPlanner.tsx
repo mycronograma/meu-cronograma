@@ -43,6 +43,7 @@ import {
   timeToMinutes,
   minutesToTime,
 } from '@/lib/utils';
+import * as plannerRules from '@/lib/plannerRules';
 import { Button, Card } from '@/components/ui';
 import { useLocalStorage } from '@/hooks';
 import { defaultSettings } from '@/lib/defaultSettings';
@@ -87,14 +88,11 @@ const parseLocalDateKey = (value: string) => {
 const hasManualSequence = (block: StudyBlock) =>
   typeof block.sequenceIndex === 'number' && Number.isFinite(block.sequenceIndex);
 
-const isLockedScheduleBlock = (block: StudyBlock) =>
-  block.status === 'completed' || block.status === 'in-progress';
-
-const isPendingStudyBlock = (block: StudyBlock) =>
-  !block.isBreak && block.status !== 'completed' && block.status !== 'skipped';
-
-const isCapacityStudyBlock = (block: StudyBlock) =>
-  !block.isBreak && block.status !== 'skipped';
+// Regras de agendamento vêm de src/lib/plannerRules.ts (com testes próprios):
+// é o que garante que um estudo concluído nunca seja movido para outro dia.
+const isLockedScheduleBlock = plannerRules.isLockedScheduleBlock;
+const isPendingStudyBlock = plannerRules.isPendingStudyBlock;
+const isCapacityStudyBlock = plannerRules.isCapacityStudyBlock;
 
 const compareDayBlocks = (a: StudyBlock, b: StudyBlock) => {
   const aHasSequence = hasManualSequence(a);
@@ -707,23 +705,12 @@ export default function WeeklyPlanner({
           !block.isBreak && dayLimit > 0 && dayStudyMinutes + block.durationMinutes > dayLimit;
 
         if (endMinutes <= defaultEnd && !exceedsDailyLimit) {
-          const originalDate = block.originalDate ? parseBlockDate(block.originalDate) : parseBlockDate(block.date);
-          originalDate.setHours(0, 0, 0, 0);
-
-          const moved: StudyBlock = {
-            ...block,
-            date: new Date(cursorDate),
-            startTime: minutesToTime(startMinutes),
-            endTime: minutesToTime(endMinutes),
-            status:
-              block.isBreak || isLockedScheduleBlock(block) ? block.status : ('rescheduled' as const),
-            originalDate: block.isBreak ? block.originalDate : originalDate,
-            rescheduleCount:
-              block.isBreak || isLockedScheduleBlock(block)
-                ? block.rescheduleCount
-                : (block.rescheduleCount || 0) + 1,
-            updatedAt: new Date(),
-          };
+          const moved = plannerRules.buildRescheduledBlock({
+            block,
+            date: cursorDate,
+            startMinutes,
+            endMinutes,
+          });
           movedBlocks.push(moved);
           dayBlocks.push(moved);
           blocksMap.set(key, dayBlocks);
@@ -1992,9 +1979,9 @@ export default function WeeklyPlanner({
             }}
             leftIcon={<ArrowRightLeft className="w-4 h-4" />}
             className="w-full sm:w-auto"
-           
+            title="Move estudos pendentes para outro dia: você escolhe o dia de origem e o destino."
           >
-            Reagendar pendências
+            Mover estudos de dia
           </Button>
         </div>
         </div>
@@ -2102,8 +2089,10 @@ export default function WeeklyPlanner({
               size="sm"
               onClick={isMobile ? goToPreviousDay : goToPreviousWeek}
               className="shrink-0"
+              aria-label={isMobile ? 'Dia anterior' : 'Semana anterior'}
+              title={isMobile ? 'Dia anterior' : 'Semana anterior'}
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4" aria-hidden="true" />
             </Button>
 
             <span
@@ -2124,8 +2113,10 @@ export default function WeeklyPlanner({
               size="sm"
               onClick={isMobile ? goToNextDay : goToNextWeek}
               className="shrink-0"
+              aria-label={isMobile ? 'Próximo dia' : 'Próxima semana'}
+              title={isMobile ? 'Próximo dia' : 'Próxima semana'}
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-4 h-4" aria-hidden="true" />
             </Button>
           </div>
 
@@ -2363,12 +2354,12 @@ export default function WeeklyPlanner({
             <div className="app-modal-panel">
               <Card className="relative" padding="lg">
               <h2 className="text-xl font-heading font-bold text-white mb-2">
-                {rescheduleSingleBlockId ? 'Reagendar estudo' : 'Reagendar pendências'}
+                {rescheduleSingleBlockId ? 'Mover este estudo' : 'Mover estudos de dia'}
               </h2>
               <p className="text-sm text-text-secondary mb-4">
                 {rescheduleSingleBlockId
                   ? 'Escolha um novo dia para este estudo.'
-                  : 'Mova estudos não concluídos de um dia para outro.'}
+                  : 'Você escolhe o dia de origem e o dia de destino. Estudos já concluídos ou em andamento não são movidos.'}
               </p>
 
               <div className="space-y-4">
@@ -2507,9 +2498,9 @@ export default function WeeklyPlanner({
                     const sourceKey = toLocalKey(sourceDate);
                     const targetKey = toLocalKey(targetDate);
 
-                    const sourceBlocks = blocks
-                      .filter((block) => toLocalKey(parseBlockDate(block.date)) === sourceKey)
-                      .filter((block) => !block.isBreak && !isLockedScheduleBlock(block));
+                    const sourceBlocks = plannerRules.selectReschedulableBlocks(
+                      blocks.filter((block) => toLocalKey(parseBlockDate(block.date)) === sourceKey)
+                    );
 
                     if (sourceBlocks.length === 0) {
                       setRescheduleError('Não há estudos pendentes no dia selecionado.');
@@ -2562,16 +2553,14 @@ export default function WeeklyPlanner({
                         return;
                       }
 
-                      movedBlocks.push({
-                        ...block,
-                        date: new Date(targetDate),
-                        startTime: minutesToTime(cursorMinutes),
-                        endTime: minutesToTime(nextEnd),
-                        status: block.isBreak ? block.status : 'rescheduled',
-                        originalDate: block.originalDate ? parseBlockDate(block.originalDate) : parseBlockDate(block.date),
-                        rescheduleCount: block.isBreak ? block.rescheduleCount : (block.rescheduleCount || 0) + 1,
-                        updatedAt: new Date(),
-                      });
+                      movedBlocks.push(
+                        plannerRules.buildRescheduledBlock({
+                          block,
+                          date: targetDate,
+                          startMinutes: cursorMinutes,
+                          endMinutes: nextEnd,
+                        })
+                      );
                       cursorMinutes = nextEnd + breakGapMinutes;
                       movedStudyMinutes += additionalStudyMinutes;
                     }
@@ -2625,6 +2614,7 @@ export default function WeeklyPlanner({
                     onClick={() => {
                       runAutoBacklogReschedule('manual');
                     }}
+                    title="O app distribui todas as pendências nos próximos dias com folga, respeitando o limite diário."
                   >
                     Replanejar automaticamente
                   </Button>
@@ -2636,8 +2626,9 @@ export default function WeeklyPlanner({
                       setIsRescheduleModalOpen(true);
                       setRescheduleSingleBlockId(null);
                     }}
+                    title="Move estudos pendentes para outro dia: você escolhe o dia de origem e o destino."
                   >
-                    Reagendar manualmente
+                    Mover estudos de dia
                   </Button>
                 </div>
 
@@ -2676,8 +2667,9 @@ export default function WeeklyPlanner({
                                 variant="secondary"
                                 size="sm"
                                 onClick={() => handleRequestQuickReschedule(block)}
+                                title="Escolher um novo dia para este estudo"
                               >
-                                Reagendar
+                                Mover
                               </Button>
                               <Button
                                 variant="ghost"

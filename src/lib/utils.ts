@@ -23,19 +23,28 @@ export function cn(...inputs: ClassValue[]) {
 // ============================================
 
 /**
- * Format time string (HH:MM) to display format
+ * Normaliza um horário "HH:MM" para exibição (24h, como o resto do app).
+ * Entrada inválida devolve string vazia em vez de "NaN:NaN".
  */
 export function formatTime(time: string): string {
-  const [hours, minutes] = time.split(':').map(Number);
-  const period = hours >= 12 ? 'PM' : 'AM';
-  const displayHours = hours % 12 || 12;
-  return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+  if (typeof time !== 'string') return '';
+
+  const [rawHours, rawMinutes] = time.split(':').map(Number);
+  if (!Number.isFinite(rawHours) || !Number.isFinite(rawMinutes)) return '';
+
+  const hours = ((Math.trunc(rawHours) % 24) + 24) % 24;
+  const minutes = Math.min(59, Math.max(0, Math.trunc(rawMinutes)));
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 }
 
 /**
- * Format minutes to hours and minutes display
+ * Format minutes to hours and minutes display.
+ * Valor ausente/inválido (bloco antigo sem `durationMinutes`, soma com NaN)
+ * virava "NaN:NaN" na tela — agora cai em "0 min".
  */
 export function formatDuration(minutes: number): string {
+  if (!Number.isFinite(minutes)) return '0 min';
+
   const safeMinutes = Math.max(0, Math.round(minutes));
   const hours = Math.floor(safeMinutes / 60);
   const mins = safeMinutes % 60;
@@ -45,25 +54,15 @@ export function formatDuration(minutes: number): string {
 }
 
 /**
- * Format decimal hours to display duration (e.g. 0.8 -> 50 min, 1.8 -> 1:50)
+ * Format decimal hours to display duration (e.g. 0.5 -> 30 min, 1.8 -> 1:48).
+ *
+ * Sem arredondamento para múltiplos de 5/10: a conta antiga exibia 1:50 para
+ * 1,8 h (108 min) e 50 min para 0,8 h (48 min), contradizendo os blocos que o
+ * estudante vê na agenda. O valor exato é o que combina com o cronograma.
  */
 export function formatHoursDuration(hours: number): string {
   if (!Number.isFinite(hours) || hours <= 0) return '0 min';
-
-  const safeHours = Math.max(0, hours);
-  const hasSingleDecimalPrecision =
-    Math.abs(safeHours * 10 - Math.round(safeHours * 10)) < 0.000001;
-
-  let minutes = safeHours * 60;
-
-  // Legacy snapshots sometimes store hours with only one decimal place (e.g. 0.8),
-  // which can display odd values like 48 min for a 50 min block.
-  if (hasSingleDecimalPrecision) {
-    const roundingStep = minutes < 30 ? 5 : 10;
-    minutes = Math.round(minutes / roundingStep) * roundingStep;
-  }
-
-  return formatDuration(minutes);
+  return formatDuration(hours * 60);
 }
 
 /**
@@ -106,14 +105,16 @@ export function getWeekStart(date: Date = new Date()): Date {
  * Format date for display
  */
 export function formatDate(date: Date, format: 'short' | 'long' | 'iso' = 'short'): string {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+
   switch (format) {
     case 'short':
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
     case 'long':
-      return date.toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        month: 'long', 
-        day: 'numeric' 
+      return date.toLocaleDateString('pt-BR', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
       });
     case 'iso':
       return toLocalDateKey(date);
@@ -176,8 +177,9 @@ export function parseBlockDate(value?: Date | string | null): Date {
  * Get day name from date
  */
 export function getDayName(date: Date, format: 'short' | 'long' = 'short'): string {
-  return date.toLocaleDateString('en-US', { 
-    weekday: format === 'short' ? 'short' : 'long' 
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('pt-BR', {
+    weekday: format === 'short' ? 'short' : 'long',
   });
 }
 

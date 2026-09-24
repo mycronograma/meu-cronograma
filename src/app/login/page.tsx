@@ -516,13 +516,13 @@ export default function LoginPage() {
 
           <p className="text-center text-text-muted text-xs mt-6">
             Ao continuar, você concorda com nossos{' '}
-            <a href="#" className="text-neon-blue hover:underline">
+            <Link href="/termos" className="text-neon-blue hover:underline">
               Termos de Uso
-            </a>{' '}
+            </Link>{' '}
             e{' '}
-            <a href="#" className="text-neon-blue hover:underline">
+            <Link href="/privacidade" className="text-neon-blue hover:underline">
               Política de Privacidade
-            </a>
+            </Link>
           </p>
         </motion.div>
       </div>

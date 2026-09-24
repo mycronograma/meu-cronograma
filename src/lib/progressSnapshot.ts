@@ -1,4 +1,4 @@
-import { levelFromXp, toLocalDateKey } from '@/lib/utils';
+import { getWeekStart, levelFromXp, parseBlockDate, toLocalDateKey } from '@/lib/utils';
 import type { AnalyticsStore, DailyAnalyticsRecord, StudyBlock } from '@/types';
 
 type DailyAnalytics = AnalyticsStore['daily'];
@@ -21,6 +21,39 @@ export function buildCompletedHoursByDate(plannerBlocks: StudyBlock[]): Record<s
     if (block.isBreak || block.status !== 'completed') return;
     const key = toDateKey(block.date);
     totals[key] = (totals[key] ?? 0) + Math.max(0, block.durationMinutes) / 60;
+  });
+
+  return totals;
+}
+
+/**
+ * Horas concluídas por disciplina **na semana atual** (segunda a domingo).
+ *
+ * A tela de disciplinas mostrava `subject.completedHours`, que é o acumulado de
+ * sempre, ao lado de `targetHours` (meta semanal): depois de algumas semanas a
+ * barra ficava cheia para sempre e o rótulo "Meta da semana" virava mentira
+ * (ex.: 220:00 / 6:00). Este helper calcula o que a semana realmente rendeu, a
+ * partir dos blocos concluídos — a mesma base usada no dashboard.
+ */
+export function buildWeeklyCompletedHoursBySubject(
+  plannerBlocks: StudyBlock[],
+  reference: Date = new Date()
+): Map<string, number> {
+  const weekStart = getWeekStart(reference);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 7);
+
+  const totals = new Map<string, number>();
+
+  plannerBlocks.forEach((block) => {
+    if (block.isBreak || block.status !== 'completed' || !block.subjectId) return;
+
+    const blockDate = parseBlockDate(block.date);
+    if (Number.isNaN(blockDate.getTime())) return;
+    if (blockDate < weekStart || blockDate >= weekEnd) return;
+
+    const minutes = Number.isFinite(block.durationMinutes) ? Math.max(0, block.durationMinutes) : 0;
+    totals.set(block.subjectId, (totals.get(block.subjectId) ?? 0) + minutes / 60);
   });
 
   return totals;

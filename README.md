@@ -317,6 +317,7 @@ Sistema inteligente que cria uma trilha pedagógica progressiva:
 | `npm run test:sync` | Sincronização no servidor (conflitos, tombstones, migração) |
 | `npm run test:sync-client` | Ponta a ponta celular ↔ computador (motor do cliente + API) |
 | `npm run test:ui` | Auditoria de interface (contraste WCAG, movimento, foco, rótulos) |
+| `npm run test:hours` | Auditoria de horas e horários (somas, fusos, reagendamento) |
 
 ## 📡 API Endpoints
 

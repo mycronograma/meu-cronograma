@@ -149,31 +149,119 @@ const walk = (directory: string) => {
 };
 walk('src');
 
-const stripTags = (value: string) => value.replace(/<[^>]*>/g, ' ');
-const hasVisibleText = (value: string) => /[A-Za-zÀ-ÿ0-9]/.test(value);
+/**
+ * Mapeia elementos `<Button>`/`<button>` do arquivo.
+ *
+ * O parser é simples de propósito, mas entende chaves: atributos como
+ * `onClick={() => salvar()}` têm `>` dentro das chaves e quebravam a checagem
+ * anterior (foi assim que botões só com ícone passaram batido).
+ */
+const findButtons = (source: string) => {
+  const found: Array<{ attributes: string; inner: string; index: number }> = [];
+  const tagPattern = /<(Button|button)\b/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = tagPattern.exec(source)) !== null) {
+    let cursor = match.index + match[0].length;
+    let depth = 0;
+    let attributesEnd = -1;
+
+    for (; cursor < source.length; cursor += 1) {
+      const char = source[cursor];
+      if (char === '{') depth += 1;
+      else if (char === '}') depth = Math.max(0, depth - 1);
+      else if (char === '>' && depth === 0) {
+        attributesEnd = cursor;
+        break;
+      }
+    }
+    if (attributesEnd === -1) continue;
+
+    const closingTag = `</${match[1]}>`;
+    const closingIndex = source.indexOf(closingTag, attributesEnd);
+    if (closingIndex === -1) continue;
+
+    found.push({
+      attributes: source.slice(match.index, attributesEnd + 1),
+      inner: source.slice(attributesEnd + 1, closingIndex),
+      index: match.index,
+    });
+    tagPattern.lastIndex = closingIndex + closingTag.length;
+  }
+
+  return found;
+};
+
+/** Extrai grupos `{...}` respeitando aninhamento. */
+const extractBraces = (inner: string) => {
+  const groups: string[] = [];
+  let depth = 0;
+  let start = -1;
+
+  for (let index = 0; index < inner.length; index += 1) {
+    const char = inner[index];
+    if (char === '{') {
+      if (depth === 0) start = index;
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0 && start !== -1) {
+        groups.push(inner.slice(start + 1, index));
+        start = -1;
+      }
+    }
+  }
+
+  return groups;
+};
+
+/**
+ * O elemento tem texto visível? Conta tags com texto, literais dentro das chaves
+ * e expressões que claramente renderizam texto (`{label}`, `{formatDuration(x)}`).
+ * Condições puras (`{pronto && <Icone />}`) não contam como rótulo.
+ */
+const hasVisibleLabel = (inner: string) => {
+  const withoutBraceGroups = inner.replace(/\{[\s\S]*\}/g, ' ');
+  const tagText = withoutBraceGroups.replace(/<[^>]*>/g, ' ');
+  // Aceita até rótulo de 1 caractere (`{h}h` -> "500h"): o que importa é o
+  // botão não ficar mudo para leitores de tela.
+  if (/[A-Za-zÀ-ÿ0-9]/.test(tagText)) return true;
+
+  for (const group of extractBraces(inner)) {
+    if (/[A-Za-zÀ-ÿ]{2,}/.test(group.replace(/<[^>]*>/g, ' ').replace(/['"][^'"]*['"]/g, ' '))) {
+      // Chamada de função ou acesso a propriedade: `{label}`, `{group.title}`,
+      // `{formatDuration(h * 60)}`. Condições (`{pronto && <Icone />}`) sobram
+      // sem identificador depois de remover as tags.
+      return true;
+    }
+  }
+
+  return false;
+};
 
 const unnamed: string[] = [];
 
 for (const file of tsxFiles) {
   const source = read(file);
-  const buttonPattern = /<button\b([\s\S]*?)>([\s\S]*?)<\/button>/g;
-  let match: RegExpExecArray | null;
 
-  while ((match = buttonPattern.exec(source)) !== null) {
-    const [, attributes, inner] = match;
-    const accessibleName = /aria-label|aria-labelledby|\btitle=/.test(attributes);
-    const textContent = stripTags(inner);
-    if (hasVisibleText(textContent) || accessibleName) continue;
+  for (const element of findButtons(source)) {
+    const accessibleName =
+      /aria-label|aria-labelledby|\btitle=|sr-only/.test(element.attributes) ||
+      /aria-label|aria-labelledby|\btitle=/.test(element.inner);
 
-    const line = source.slice(0, match.index).split('\n').length;
+    if (hasVisibleLabel(element.inner) || accessibleName) continue;
+
+    const line = source.slice(0, element.index).split('\n').length;
     unnamed.push(`${relative(root, file)}:${line}`);
   }
 }
 
 const iconLabels = tsxFiles.filter((file) => read(file).includes('aria-hidden'));
+
 console.log(
   `\nBotões só com ícone: ${unnamed.length} sem nome acessível (de ${tsxFiles.length} arquivos analisados)`
 );
+for (const item of unnamed) console.log(`  - ${item}`);
 console.log(`Ícones decorativos marcados com aria-hidden em ${iconLabels.length} arquivos`);
 
 assert.deepStrictEqual(

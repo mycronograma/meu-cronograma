@@ -5,12 +5,13 @@
  * Gerenciar disciplinas com prioridade e dificuldade
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, BookOpen, Search } from 'lucide-react';
 import { Button, Card } from '@/components/ui';
 import { SubjectCard, SubjectForm, PresetSelector } from '@/components/subjects';
+import { buildWeeklyCompletedHoursBySubject } from '@/lib/progressSnapshot';
 import { EmptySubjects } from '@/components/onboarding';
 import { useOnboarding, useLocalStorage } from '@/hooks';
 import { formatHoursDuration, generateId, parseBlockDate } from '@/lib/utils';
@@ -109,7 +110,7 @@ export default function SubjectsPage() {
     examDate: '',
   });
   const [userSettings, setUserSettings] = useLocalStorage<UserSettings>('nexora_user_settings', defaultSettings);
-  const [, setPlannerBlocks] = useLocalStorage<StudyBlock[]>('nexora_planner_blocks', []);
+  const [plannerBlocks, setPlannerBlocks] = useLocalStorage<StudyBlock[]>('nexora_planner_blocks', []);
   const [, setScheduleRange] = useLocalStorage<{ startDate: string; endDate: string } | null>(
     'nexora_schedule_range',
     null
@@ -574,8 +575,13 @@ export default function SubjectsPage() {
   const totalTargetHours = weeklyGoalFromPrefs > 0
     ? weeklyGoalFromPrefs
     : subjects.reduce((sum, s) => sum + s.targetHours, 0);
-  const totalCompletedHours = subjects.reduce(
-    (sum, s) => sum + s.completedHours,
+  // Horas da semana atual por disciplina (o acumulado de sempre fica no card, em "Total geral").
+  const weeklyCompletedHoursBySubject = useMemo(
+    () => buildWeeklyCompletedHoursBySubject(plannerBlocks),
+    [plannerBlocks]
+  );
+  const totalWeeklyCompletedHours = Array.from(weeklyCompletedHoursBySubject.values()).reduce(
+    (sum, hours) => sum + hours,
     0
   );
 
@@ -656,9 +662,9 @@ export default function SubjectsPage() {
                 <span className="font-bold text-white">{formatHoursDuration(totalTargetHours)}</span>
               </div>
               <div>
-                <span className="text-text-secondary">Concluído: </span>
+                <span className="text-text-secondary">Concluído na semana: </span>
                 <span className="font-bold text-neon-cyan">
-                  {formatHoursDuration(totalCompletedHours)}
+                  {formatHoursDuration(totalWeeklyCompletedHours)}
                 </span>
               </div>
             </div>
@@ -717,6 +723,7 @@ export default function SubjectsPage() {
                 subject={subject}
                 onEdit={handleEditSubject}
                 onDelete={handleDeleteSubject}
+                weeklyCompletedHours={weeklyCompletedHoursBySubject.get(subject.id) ?? 0}
               />
             </motion.div>
           ))}

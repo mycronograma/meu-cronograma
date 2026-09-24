@@ -29,6 +29,7 @@
     "test:sync": "tsx scripts/sync-delta.test.ts",
     "test:sync-client": "tsx scripts/client-sync.test.ts",
     "test:ui": "tsx scripts/ui-audit.test.ts",
+    "test:hours": "tsx scripts/hours-audit.test.ts",
     "test:trainer-dashboard": "playwright test scripts/trainer-dashboard-audit.spec.cjs --reporter=line"
   },
   "dependencies": {
