@@ -1398,7 +1398,7 @@ export default function SettingsPage() {
       <Card className={cn(activeSection === 'study' ? 'block' : 'hidden')}>
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 rounded-xl bg-neon-purple/20 flex items-center justify-center">
-            <Clock className="w-5 h-5 text-neon-purple" />
+            <Clock className="w-5 h-5 text-neon-violet" />
           </div>
           <div>
             <h2 className="text-lg font-heading font-bold text-white">
@@ -1594,7 +1594,7 @@ export default function SettingsPage() {
                   className={cn(
                     'w-full h-11 rounded-xl font-medium text-sm transition-all touch-manipulation active:scale-[0.99]',
                     excludeDays.includes(index)
-                      ? 'bg-neon-purple/20 text-neon-purple border border-neon-purple/50'
+                      ? 'bg-neon-purple/20 text-neon-violet border border-neon-purple/50'
                       : 'bg-card-bg text-text-secondary border border-card-border hover:border-neon-purple/30'
                   )}
                 >

@@ -9,6 +9,7 @@ import { forwardRef } from 'react';
 import { motion, HTMLMotionProps } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useMotionPrefs } from '@/hooks/useMotionPrefs';
 
 interface ButtonProps extends Omit<HTMLMotionProps<'button'>, 'children'> {
   children: React.ReactNode;
@@ -68,17 +69,23 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref
   ) => {
+    const { hoverEffects } = useMotionPrefs();
+    const isInactive = Boolean(disabled || loading);
+
     return (
       <motion.button
         ref={ref}
         type={type}
-        whileHover={disabled || loading ? undefined : { scale: 1.02, y: -1 }}
-        whileTap={disabled || loading ? undefined : { scale: 0.98 }}
+        whileHover={isInactive || !hoverEffects ? undefined : { scale: 1.02, y: -1 }}
+        whileTap={isInactive ? undefined : { scale: hoverEffects ? 0.98 : 1 }}
         disabled={disabled || loading}
+        aria-busy={loading || undefined}
         className={cn(
           'inline-flex min-w-0 max-w-full items-center justify-center gap-2 text-center leading-tight',
           'transition-all duration-200',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neon-blue/70 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
           'disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none',
+          'cursor-pointer',
           variantStyles[variant],
           sizeStyles[size],
           className
@@ -86,7 +93,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         {...props}
       >
         {loading ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
+          <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
         ) : (
           leftIcon
         )}

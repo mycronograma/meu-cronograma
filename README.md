@@ -316,6 +316,7 @@ Sistema inteligente que cria uma trilha pedagógica progressiva:
 | `npm run test:year-simulation` | Simulação determinística de 1 ano de uso |
 | `npm run test:sync` | Sincronização no servidor (conflitos, tombstones, migração) |
 | `npm run test:sync-client` | Ponta a ponta celular ↔ computador (motor do cliente + API) |
+| `npm run test:ui` | Auditoria de interface (contraste WCAG, movimento, foco, rótulos) |
 
 ## 📡 API Endpoints
 
@@ -403,6 +404,22 @@ CMD ["npm", "start"]
 2. Confirmar que não há 3 blocos seguidos da mesma matéria.
 3. Conferir inserção de revisões 24h / 7d / 30d.
 4. Matérias de maior peso aparecem mais vezes na semana.
+
+## 🎨 Design system e acessibilidade
+
+O tema é escuro, com vidro (glassmorphism) e acentos neon. Regras que o projeto segue
+— e que agora são **verificadas por teste** em `npm run test:ui`:
+
+- **Contraste:** todo token de texto passa no mínimo de 4,5:1 do WCAG AA sobre os fundos
+  do app (`--text-primary` 20:1, `--text-secondary` 6,4:1, `--text-muted` 5,1:1). O roxo de
+  marca (`--neon-purple` #7F00FF) fica só para preenchimento/gradiente; para texto e ícones
+  existe `--neon-violet` (#9F5CFF, 5,2:1);
+- **Movimento:** quem pede menos animação no sistema recebe a interface estática
+  (`prefers-reduced-motion`); os cards não "levantam" no toque em telas sem mouse;
+- **Teclado:** foco visível (`:focus-visible`) em botões, links e campos, com cursor de clique
+  e `aria-label` em botões que só têm ícone;
+- **Feedback de falha:** se o progresso não subir para a conta, aparece um banner explicando
+  que os dados estão salvos no aparelho (antes a falha ficava só no console).
 
 ## 🔄 Progresso sincronizado (delta)
 

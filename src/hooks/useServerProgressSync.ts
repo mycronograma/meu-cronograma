@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useLocalStorage, LOCAL_STORAGE_SYNC_EVENT } from './useLocalStorage';
 import { ROW_STORE_KEYS, SNAPSHOT_STORE_KEYS, syncNow, type SyncStats } from '@/lib/clientSync';
+import { SYNC_STATUS_EVENT } from '@/components/layout/SyncStatusBanner';
 
 /** Todas as chaves que fazem parte do progresso do usuário. */
 export const SERVER_PROGRESS_STORE_KEYS = [
@@ -159,12 +160,10 @@ export function useServerProgressSync() {
     return () => clearInterval(interval);
   }, [isAuthenticated, runSync]);
 
-  // Avisa a interface (ex.: configurações) sempre que o status muda.
+  // Avisa a interface (banner de falha + Configurações) sempre que o status muda.
   useEffect(() => {
     if (typeof window === 'undefined' || !storedStatus) return;
-    window.dispatchEvent(
-      new CustomEvent('nexora-sync-status', { detail: storedStatus })
-    );
+    window.dispatchEvent(new CustomEvent(SYNC_STATUS_EVENT, { detail: storedStatus }));
   }, [storedStatus]);
 
   return useMemo(

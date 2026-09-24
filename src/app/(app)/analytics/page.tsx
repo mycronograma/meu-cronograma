@@ -331,10 +331,10 @@ export default function AnalyticsPage() {
             {/* Melhor Disciplina */}
             <div className="p-4 max-[479px]:p-3 rounded-xl bg-neon-purple/10 border border-neon-purple/20">
               <div className="flex items-center gap-2 mb-2 max-[479px]:mb-1">
-                <Award className="w-5 h-5 max-[479px]:w-4 max-[479px]:h-4 text-neon-purple" />
+                <Award className="w-5 h-5 max-[479px]:w-4 max-[479px]:h-4 text-neon-violet" />
                 <span className="font-medium text-white">Melhor Disciplina</span>
               </div>
-              <p className="text-2xl max-[479px]:text-[22px] font-heading font-bold text-neon-purple">
+              <p className="text-2xl max-[479px]:text-[22px] font-heading font-bold text-neon-violet">
                 {intelligentSummary.strongestSubject?.name ?? '--'}
               </p>
               <p className="text-sm max-[479px]:text-xs text-text-secondary mt-1">

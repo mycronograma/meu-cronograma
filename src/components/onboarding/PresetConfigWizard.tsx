@@ -1231,7 +1231,7 @@ export default function PresetConfigWizard({ isOpen, presetId, presetName, baseS
                 <>
                   <Card className={cn(SETTINGS_SECTION_CLASS, 'p-3 sm:p-4')}>
                     <div className="flex items-start gap-3">
-                      <Sparkles className="mt-0.5 h-5 w-5 text-neon-purple" />
+                      <Sparkles className="mt-0.5 h-5 w-5 text-neon-violet" />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-semibold text-white">Alvo de Conclusão</p>
                         <p className="text-xs text-text-muted">
@@ -1345,7 +1345,7 @@ export default function PresetConfigWizard({ isOpen, presetId, presetName, baseS
 
                           {answers.targetTotalHours && answers.targetTotalHours > 0 && weeklyHours > 0 ? (
                             <div className="mt-3 text-[11px] text-text-secondary bg-white/[0.03] p-2 rounded-lg border border-white/5">
-                              ⏳ Estudando {fmtHours(weeklyHours)} por semana, você levará cerca de <strong className="text-neon-purple">{Math.ceil(answers.targetTotalHours / weeklyHours)} semanas</strong> (aprox. {Math.round(answers.targetTotalHours / weeklyHours / 4.33 * 10)/10} meses) para concluir essa meta.
+                              ⏳ Estudando {fmtHours(weeklyHours)} por semana, você levará cerca de <strong className="text-neon-violet">{Math.ceil(answers.targetTotalHours / weeklyHours)} semanas</strong> (aprox. {Math.round(answers.targetTotalHours / weeklyHours / 4.33 * 10)/10} meses) para concluir essa meta.
                             </div>
                           ) : null}
                         </div>
@@ -1451,7 +1451,7 @@ export default function PresetConfigWizard({ isOpen, presetId, presetName, baseS
                       <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-3">
                         <p className="text-xs text-text-muted">Blocos e pausa</p>
                         <p className="text-xl font-semibold text-white flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-neon-purple" />
+                          <Clock className="h-4 w-4 text-neon-violet" />
                           {answers.focusBlockMinutes || answers.focusMinutes} / {answers.breakMinutes} min
                         </p>
                         <p className="text-xs text-text-secondary mt-1">{weeklyBlocks} bloco(s) na semana</p>

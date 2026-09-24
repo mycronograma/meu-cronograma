@@ -697,7 +697,7 @@ export default function PlannerPage() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="px-3 py-1 rounded-full bg-neon-purple/10 border border-neon-purple/30 text-neon-purple text-xs">
+                <div className="px-3 py-1 rounded-full bg-neon-purple/10 border border-neon-purple/30 text-neon-violet text-xs">
                   Roadmap ativo
                 </div>
                 <button

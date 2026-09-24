@@ -16,11 +16,12 @@ const config: Config = {
         'card-border': 'rgba(0, 180, 255, 0.15)',
         'neon-blue': '#00B4FF',
         'neon-purple': '#7F00FF',
+        'neon-violet': '#9F5CFF',
         'neon-cyan': '#00FFC8',
         'neon-pink': '#FF00AA',
         'text-primary': '#FFFFFF',
         'text-secondary': '#8892A6',
-        'text-muted': '#4A5568',
+        'text-muted': '#758198',
       },
       // Typography
       fontFamily: {

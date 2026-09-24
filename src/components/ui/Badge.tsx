@@ -19,7 +19,7 @@ const variantStyles = {
   success: 'bg-neon-cyan/15 text-neon-cyan border-neon-cyan/30',
   warning: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
   danger: 'bg-red-500/15 text-red-400 border-red-500/30',
-  purple: 'bg-neon-purple/15 text-neon-purple border-neon-purple/30',
+  purple: 'bg-neon-purple/15 text-neon-violet border-neon-purple/30',
 };
 
 const sizeStyles = {

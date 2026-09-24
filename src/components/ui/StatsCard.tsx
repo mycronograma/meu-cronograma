@@ -33,7 +33,7 @@ const colorStyles = {
   },
   purple: {
     iconBg: 'bg-neon-purple/20',
-    iconColor: 'text-neon-purple',
+    iconColor: 'text-neon-violet',
     glow: 'purple',
   },
   cyan: {

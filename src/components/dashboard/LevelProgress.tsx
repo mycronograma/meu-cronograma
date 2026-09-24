@@ -43,7 +43,7 @@ export default function LevelProgress({
           whileHover={{ rotate: 10, scale: 1.1 }}
           className="w-10 h-10 max-[479px]:w-8 max-[479px]:h-8 sm:w-12 sm:h-12 rounded-xl bg-neon-purple/20 flex items-center justify-center"
         >
-          <Trophy className="w-5 h-5 max-[479px]:w-4 max-[479px]:h-4 sm:w-6 sm:h-6 text-neon-purple" />
+          <Trophy className="w-5 h-5 max-[479px]:w-4 max-[479px]:h-4 sm:w-6 sm:h-6 text-neon-violet" />
         </motion.div>
       </div>
 

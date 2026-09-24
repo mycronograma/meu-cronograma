@@ -28,6 +28,7 @@
     "test:year-simulation": "tsx scripts/year-simulation.test.ts",
     "test:sync": "tsx scripts/sync-delta.test.ts",
     "test:sync-client": "tsx scripts/client-sync.test.ts",
+    "test:ui": "tsx scripts/ui-audit.test.ts",
     "test:trainer-dashboard": "playwright test scripts/trainer-dashboard-audit.spec.cjs --reporter=line"
   },
   "dependencies": {

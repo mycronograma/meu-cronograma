@@ -287,10 +287,12 @@ export default function QuickSessionModal({
 
               {/* Close button */}
               <button
+                type="button"
                 onClick={handleClose}
+                aria-label="Fechar"
                 className="absolute top-4 right-4 p-2 rounded-lg hover:bg-white/10 text-text-muted hover:text-white transition-colors z-10"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
 
               <div className="p-4 sm:p-8">
@@ -504,7 +506,7 @@ export default function QuickSessionModal({
                         <p className="text-xs text-text-muted">Estudado</p>
                       </div>
                       <div className="p-4 rounded-xl bg-card-bg border border-card-border">
-                        <Sparkles className="w-5 h-5 text-neon-purple mx-auto mb-2" />
+                        <Sparkles className="w-5 h-5 text-neon-violet mx-auto mb-2" />
                         <p className="text-xl font-bold text-white">
                           +{calculateXP()}
                         </p>
