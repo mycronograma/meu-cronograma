@@ -9,7 +9,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Map as MapIcon, X } from 'lucide-react';
 import { WeeklyPlanner } from '@/components/planner';
-import { generateChronologicalSchedule, getPhaseForDate } from '@/services/roadmapEngine';
+import {
+  generateChronologicalSchedule,
+  getPhaseForDate,
+  type PendingReviewsByDate,
+} from '@/services/roadmapEngine';
 import { buildSubjectPerformanceProfiles, inferUserLearningLevel } from '@/services/adaptiveStudyIntelligence';
 import { useLocalStorage } from '@/hooks';
 import {
@@ -123,6 +127,12 @@ export default function PlannerPage() {
   const [firstCycleAllSubjects, setFirstCycleAllSubjects] = useLocalStorage<boolean>(
     'nexora_first_cycle_all_subjects',
     true
+  );
+  // Revisões espaçadas (7d/30d) que caem fora da janela gerada ficam guardadas
+  // aqui e são cobradas na próxima geração do cronograma.
+  const [pendingReviews, setPendingReviews] = useLocalStorage<PendingReviewsByDate>(
+    'nexora_pending_reviews',
+    {}
   );
   const scheduleStartDate = useMemo(
     () => (scheduleRange?.startDate ? parseLocalKey(scheduleRange.startDate) : null),
@@ -246,10 +256,32 @@ export default function PlannerPage() {
     userSettings.smartBreaks,
   ]);
 
-  const phaseInfo = getPhaseForDate(
-    new Date(),
-    scheduleStartDate ?? getWeekStart(new Date())
-  );
+  // Início real da jornada: sem isso, gerar semana a semana reinicia as fases
+  // pedagógicas e nunca libera simulados/revisões de 7 e 30 dias.
+  const pedagogicalStartDate = useMemo(() => {
+    const fromPrefs = studyPrefs.startDate ? parseLocalKey(studyPrefs.startDate) : null;
+    if (fromPrefs) return fromPrefs;
+
+    const firstBlockDate = blocks.reduce<Date | null>((earliest, block) => {
+      const blockDate = parseBlockDate(block.date);
+      if (Number.isNaN(blockDate.getTime())) return earliest;
+      if (!earliest || blockDate < earliest) return blockDate;
+      return earliest;
+    }, null);
+
+    return firstBlockDate ?? scheduleStartDate ?? getWeekStart(new Date());
+  }, [blocks, scheduleStartDate, studyPrefs.startDate]);
+
+  const lastSimuladoDate = useMemo(() => {
+    const simuladoDates = blocks
+      .filter((block) => !block.isBreak && (block.type === 'SIMULADO_AREA' || block.type === 'SIMULADO_COMPLETO'))
+      .map((block) => parseBlockDate(block.date))
+      .filter((date) => !Number.isNaN(date.getTime()))
+      .sort((a, b) => b.getTime() - a.getTime());
+    return simuladoDates[0];
+  }, [blocks]);
+
+  const phaseInfo = getPhaseForDate(new Date(), pedagogicalStartDate);
   const inferredUserLevel = useMemo(
     () => inferUserLearningLevel(studyPrefs, subjects, analytics),
     [studyPrefs, subjects, analytics]
@@ -407,6 +439,9 @@ export default function PlannerPage() {
       },
       startDate,
       endDate,
+      pedagogicalStartDate,
+      pendingReviews,
+      lastSimuladoDate,
       preferredStart: userSettings.preferredStart || '09:00',
       preferredEnd: userSettings.preferredEnd || minutesToTime(timeToMinutes('09:00') + 6 * 60),
       maxBlockMinutes: aiProfile.blockMinutes,
@@ -446,6 +481,28 @@ export default function PlannerPage() {
           block.status === 'completed' &&
           !block.isBreak &&
           (block.type === 'EXERCICIOS' || block.sessionType === 'pratica')
+        ) {
+          acc[block.subjectId] = (acc[block.subjectId] || 0) + 1;
+        }
+        return acc;
+      }, {}),
+      completedSimuladosBySubject: blocks.reduce<Record<string, number>>((acc, block) => {
+        if (
+          block.status === 'completed' &&
+          !block.isBreak &&
+          (block.type === 'SIMULADO_AREA' ||
+            block.type === 'SIMULADO_COMPLETO' ||
+            block.sessionType === 'simulado')
+        ) {
+          acc[block.subjectId] = (acc[block.subjectId] || 0) + 1;
+        }
+        return acc;
+      }, {}),
+      completedReviewsBySubject: blocks.reduce<Record<string, number>>((acc, block) => {
+        if (
+          block.status === 'completed' &&
+          !block.isBreak &&
+          (block.type === 'REVISAO' || block.sessionType === 'revisao')
         ) {
           acc[block.subjectId] = (acc[block.subjectId] || 0) + 1;
         }
@@ -536,6 +593,17 @@ export default function PlannerPage() {
       startDate: toLocalKey(startDate),
       endDate: toLocalKey(endDate),
     });
+    // Revisões que ficaram para depois da janela gerada voltam na próxima geração.
+    setPendingReviews((previous) => {
+      const carried: PendingReviewsByDate = { ...(schedule.pendingReviews || {}) };
+      Object.entries(previous || {}).forEach(([dateKey, subjectIds]) => {
+        const parsed = parseLocalKey(dateKey);
+        if (!parsed || parsed > endDate) {
+          carried[dateKey] = subjectIds;
+        }
+      });
+      return carried;
+    });
     setIsGenerating(false);
   }, [
     subjects,
@@ -553,9 +621,13 @@ export default function PlannerPage() {
     firstCycleAllSubjects,
     inferredUserLevel,
     performanceProfilesBySubject,
+    pedagogicalStartDate,
+    pendingReviews,
+    lastSimuladoDate,
     scheduleStartDate,
     scheduleEndDate,
     setBlocks,
+    setPendingReviews,
     setScheduleRange,
   ]);
 

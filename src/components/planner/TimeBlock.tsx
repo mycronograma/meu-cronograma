@@ -89,6 +89,7 @@ export default function TimeBlock({
         SIMULADO_AREA: { label: 'Simulado (Área)', icon: Timer, className: 'bg-amber-400/15 text-amber-300 border-amber-400/30' },
         SIMULADO_COMPLETO: { label: 'Simulado (Completo)', icon: Timer, className: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
         ANALISE: { label: 'Correção', icon: Repeat, className: 'bg-slate-400/15 text-slate-200 border-slate-400/30' },
+        REVISAO_ATIVA: { label: 'Revisão ativa', icon: Repeat, className: 'bg-emerald-400/15 text-emerald-300 border-emerald-400/30' },
       }[block.type]
     : null;
   const displayTitle =

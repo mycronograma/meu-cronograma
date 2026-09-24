@@ -520,3 +520,132 @@ assert.strictEqual(
 );
 
 console.log('wizard-driven roadmap tests passed');
+
+// ---------------------------------------------------------------------------
+// Regressão: geração semana a semana (fluxo real do wizard/planejador)
+// ---------------------------------------------------------------------------
+const weeklyStart = new Date('2026-03-02T00:00:00');
+const weeklyEnd = new Date('2026-03-08T00:00:00');
+const studyStart = new Date('2026-01-05T00:00:00');
+
+const buildWeeklyLimits = (from: Date, to: Date) => {
+  const limits: Record<string, number> = {};
+  const cursor = new Date(from);
+  while (cursor <= to) {
+    const day = cursor.getDay();
+    limits[
+      `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(
+        cursor.getDate()
+      ).padStart(2, '0')}`
+    ] = day === 0 ? 0 : 180;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return limits;
+};
+
+const completedBySubject = Object.fromEntries(subjects.map((subject) => [subject.id, 12]));
+
+const weeklySchedule = generateChronologicalSchedule({
+  subjects,
+  preferences,
+  startDate: weeklyStart,
+  endDate: weeklyEnd,
+  pedagogicalStartDate: studyStart,
+  completedLessonsTotal: 40,
+  completedLessonsBySubject: completedBySubject,
+  completedPracticeTotal: 30,
+  completedPracticeBySubject: completedBySubject,
+  completedReviewsBySubject: completedBySubject,
+  // Sem simulado concluído ainda: o ciclo está exatamente na etapa de simulado.
+  completedSimuladosBySubject: {},
+  preferredStart: '09:00',
+  preferredEnd: '18:00',
+  maxBlockMinutes: 60,
+  breakMinutes: 10,
+  restDays: [0],
+  dailyLimitByDate: buildWeeklyLimits(weeklyStart, weeklyEnd),
+  firstCycleAllSubjects: false,
+  enableScheduleCache: false,
+  simuladoRules: {
+    minLessonsBeforeSimulated: 20,
+    minLessonsPerSubject: 2,
+    minPracticeBeforeSimulated: 12,
+    minDaysBeforeSimulated: 14,
+    frequencyDays: 7,
+    minLessonsBeforeAreaSimulated: 8,
+    minDaysBeforeAreaSimulated: 7,
+  },
+});
+
+assert.ok(
+  weeklySchedule.blocks.some(
+    (block) => block.type === 'SIMULADO_AREA' || block.type === 'SIMULADO_COMPLETO'
+  ),
+  'gerar uma semana isolada deve liberar simulado quando o estudante já tem histórico'
+);
+
+// Revisões espaçadas que caem fora da janela ficam pendentes e são cobradas depois.
+const withPending: typeof weeklySchedule = generateChronologicalSchedule({
+  subjects,
+  preferences,
+  startDate: weeklyStart,
+  endDate: weeklyEnd,
+  pedagogicalStartDate: studyStart,
+  preferredStart: '09:00',
+  preferredEnd: '18:00',
+  maxBlockMinutes: 60,
+  breakMinutes: 10,
+  restDays: [0],
+  dailyLimitByDate: buildWeeklyLimits(weeklyStart, weeklyEnd),
+  firstCycleAllSubjects: true,
+  enableScheduleCache: false,
+  completedLessonsTotal: 0,
+  completedPracticeTotal: 0,
+});
+
+const pendingKeys = Object.keys(withPending.pendingReviews ?? {});
+assert.ok(pendingKeys.length > 0, 'revisões de 7/30 dias fora da janela devem ficar pendentes');
+
+const nextWeekStart = new Date('2026-03-09T00:00:00');
+const nextWeekEnd = new Date('2026-03-15T00:00:00');
+const receivingSchedule = generateChronologicalSchedule({
+  subjects,
+  preferences,
+  startDate: nextWeekStart,
+  endDate: nextWeekEnd,
+  pedagogicalStartDate: studyStart,
+  pendingReviews: withPending.pendingReviews,
+  preferredStart: '09:00',
+  preferredEnd: '18:00',
+  maxBlockMinutes: 60,
+  breakMinutes: 10,
+  restDays: [0],
+  dailyLimitByDate: buildWeeklyLimits(nextWeekStart, nextWeekEnd),
+  firstCycleAllSubjects: false,
+  enableScheduleCache: false,
+  completedLessonsTotal: 20,
+  completedLessonsBySubject: completedBySubject,
+  completedPracticeTotal: 12,
+  completedPracticeBySubject: completedBySubject,
+  completedReviewsBySubject: completedBySubject,
+});
+
+assert.ok(
+  receivingSchedule.blocks.some(
+    (block) => block.type === 'REVISAO' || block.sessionType === 'revisao'
+  ),
+  'a semana seguinte deve cobrar as revisões espaçadas pendentes'
+);
+
+const activeDayKeys = Object.keys(withPending.pendingReviews ?? {}).filter((dateKey) => {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.getDay() !== 0;
+});
+assert.strictEqual(
+  activeDayKeys.length,
+  pendingKeys.length,
+  'revisões pendentes não devem cair em dias de descanso'
+);
+
+console.log('weekly roadmap scheduling tests passed');

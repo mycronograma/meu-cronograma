@@ -34,6 +34,35 @@ function readBrowserStorage<T>(key: string): { hasValue: boolean; value?: T } {
   }
 }
 
+export const LOCAL_STORAGE_ERROR_EVENT = 'nexora-local-storage-error';
+
+type ClientStoreErrorDetail = {
+  key: string;
+  failedBytes: number;
+};
+
+/**
+ * Avisa a interface quando o navegador recusa a gravação (normalmente cota
+ * cheia). Antes o erro era só um console.warn: o estudante continuava usando o
+ * app achando que estava salvando e perdia o progresso ao recarregar.
+ */
+function emitStorageError(key: string, payload: unknown) {
+  if (typeof window === 'undefined') return;
+
+  let failedBytes = 0;
+  try {
+    failedBytes = JSON.stringify(payload)?.length ?? 0;
+  } catch {
+    failedBytes = 0;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent<ClientStoreErrorDetail>(LOCAL_STORAGE_ERROR_EVENT, {
+      detail: { key, failedBytes },
+    })
+  );
+}
+
 function writeBrowserStorage<T>(key: string, value: T) {
   if (typeof window === 'undefined') return;
 
@@ -41,6 +70,7 @@ function writeBrowserStorage<T>(key: string, value: T) {
     window.localStorage.setItem(key, JSON.stringify(value));
   } catch (error) {
     console.warn(`Error writing browser storage key "${key}":`, error);
+    emitStorageError(key, value);
   }
 }
 

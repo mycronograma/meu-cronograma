@@ -871,6 +871,9 @@ export default function SettingsPage() {
   };
 
   const clearServerProgress = async (mode: 'onboarding' | 'progress') => {
+    // No modo demo local não existe sessão/banco: limpar apenas o armazenamento local.
+    if (isLocalDemoAuthEnabled) return;
+
     const response = await fetch('/api/progress', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },

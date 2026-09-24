@@ -375,6 +375,33 @@ const makeXpEvent = (params: {
   metadata: params.metadata,
 });
 
+/**
+ * Dias sem estudo planejado (descanso). Usa `excludeDays`/`dailyHoursByWeekday` das
+ * preferências para que a sequência de dias não seja quebrada por um descanso.
+ */
+const resolveRestDays = (userSettings: UserSettings, studyPrefs: StudyPreferences): number[] => {
+  const restDays = new Set<number>();
+
+  (userSettings.excludeDays ?? []).forEach((day) => {
+    if (day >= 0 && day <= 6) restDays.add(day);
+  });
+
+  const hoursByWeekday = userSettings.dailyHoursByWeekday;
+  if (hoursByWeekday) {
+    weekdayKeys.forEach((key, index) => {
+      const hours = hoursByWeekday[key];
+      if (typeof hours === 'number' && hours <= 0) restDays.add(index);
+    });
+  } else if ((studyPrefs.daysOfWeek ?? []).length > 0) {
+    const activeDays = new Set(studyPrefs.daysOfWeek);
+    for (let day = 0; day <= 6; day += 1) {
+      if (!activeDays.has(day)) restDays.add(day);
+    }
+  }
+
+  return Array.from(restDays).sort((a, b) => a - b);
+};
+
 const getTargetMinutesForDate = (params: {
   date: Date;
   plannerBlocks: StudyBlock[];
@@ -579,7 +606,13 @@ export function buildTrainerSnapshot(params: {
 
   const safeEvents = dedupeXpEvents(xpEvents);
   const safeAchievements = dedupeAchievements(unlockedAchievements);
-  const legacyGamification = computeGamificationSnapshot({ plannerBlocks, analytics, now });
+  const legacyGamification = computeGamificationSnapshot({
+    plannerBlocks,
+    analytics,
+    now,
+    // Dias de descanso não quebram a sequência (ex.: domingo configurado nas preferências).
+    restDays: resolveRestDays(userSettings, studyPrefs),
+  });
   const eventsTotalXp = safeEvents.reduce((sum, event) => sum + event.amount, 0);
   const totalXp = eventsTotalXp > 0 ? eventsTotalXp : legacyGamification.totalXp;
   const levelData = trainerLevelFromXp(totalXp);

@@ -7,6 +7,7 @@ const BLOCK_TYPE_LABELS: Record<StudyBlockType, string> = {
   SIMULADO_AREA: 'Simulado (Área)',
   SIMULADO_COMPLETO: 'Simulado (Completo)',
   ANALISE: 'Correção',
+  REVISAO_ATIVA: 'Revisão ativa',
 };
 
 export function getStudyBlockTypeLabel(

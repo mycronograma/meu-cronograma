@@ -309,6 +309,11 @@ Sistema inteligente que cria uma trilha pedagógica progressiva:
 | `npm run db:push` | Push schema to database |
 | `npm run db:seed` | Seed database with mock data and presets |
 | `npm run db:studio` | Open Prisma Studio |
+| `npm run test:roadmap` | Testes do roadmap/gerador de cronograma |
+| `npm run test:student-audit` | Auditoria de produto (streak, analytics, presets) |
+| `npm run test:backlog` | Testes do reencaixe de backlog |
+| `npm run test:gamification` | Testes de XP, níveis e conquistas |
+| `npm run test:year-simulation` | Simulação determinística de 1 ano de uso |
 
 ## 📡 API Endpoints
 
@@ -396,6 +401,19 @@ CMD ["npm", "start"]
 2. Confirmar que não há 3 blocos seguidos da mesma matéria.
 3. Conferir inserção de revisões 24h / 7d / 30d.
 4. Matérias de maior peso aparecem mais vezes na semana.
+
+## 🧪 Simulação de 1 ano
+
+`npm run test:year-simulation` roda um ano inteiro de uso real com o motor de verdade:
+gera o cronograma **semana a semana** (fluxo do wizard/planejador), conclui ~86% dos blocos,
+reencaixa o backlog, atualiza analytics e gamificação, e valida invariantes:
+
+- nenhum bloco em dia de descanso, sobreposto ou acima do limite diário;
+- a agenda continua com aulas, exercícios, revisões **e simulados** ao longo do ano;
+- a sequência de dias passa de 7 dias para quem tem 1 dia de descanso;
+- o volume de dados no navegador fica abaixo do limite do `localStorage`.
+
+Bugs encontrados e corrigidos com o uso dessa simulação estão em [RELATORIO-BUGS.md](RELATORIO-BUGS.md).
 
 ## 📄 License
 

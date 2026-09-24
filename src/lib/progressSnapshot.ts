@@ -82,11 +82,25 @@ export function buildMergedDailyStudyData(
   return merged;
 }
 
+export interface StreakOptions {
+  /**
+   * Dias de descanso (0 = domingo). Não contam como estudo, mas também não
+   * quebram a sequência: sem isso, quem estuda 6 dias por semana e descansa no
+   * domingo nunca passava de 6 dias e as conquistas de 7/30 dias eram impossíveis.
+   */
+  restDays?: number[];
+}
+
+const buildRestDaySet = (options?: StreakOptions) =>
+  new Set((options?.restDays ?? []).filter((day) => day >= 0 && day <= 6));
+
 export function computeStudyStreak(
   dailyAnalytics: DailyAnalytics,
   completedHoursByDate: Record<string, number>,
-  now: Date = new Date()
+  now: Date = new Date(),
+  options?: StreakOptions
 ) {
+  const restDays = buildRestDaySet(options);
   let streak = 0;
   const todayKey = toLocalDateKey(now);
   const studiedToday = getStudyHoursForDate(todayKey, dailyAnalytics, completedHoursByDate) > 0;
@@ -100,9 +114,15 @@ export function computeStudyStreak(
 
     if (hours > 0) {
       streak += 1;
-    } else {
-      break;
+      continue;
     }
+
+    // Dia de descanso configurado não interrompe a sequência (e não conta como dia estudado).
+    if (restDays.has(date.getDay())) {
+      continue;
+    }
+
+    break;
   }
 
   return streak;
@@ -116,8 +136,10 @@ const dateKeyToUtcTime = (dateKey: string) => {
 
 export function computeLongestStudyStreak(
   dailyAnalytics: DailyAnalytics,
-  completedHoursByDate: Record<string, number>
+  completedHoursByDate: Record<string, number>,
+  options?: StreakOptions
 ) {
+  const restDays = buildRestDaySet(options);
   const dateKeySet = new Set<string>();
 
   Object.keys(dailyAnalytics).forEach((key) => {
@@ -149,7 +171,30 @@ export function computeLongestStudyStreak(
       if (current > longest) {
         longest = current;
       }
-    } else if (diffDays > 1) {
+      continue;
+    }
+
+    if (diffDays > 1 && restDays.size > 0) {
+      // O intervalo só continua sendo sequência se todos os dias pulados forem
+      // dias de descanso configurados (ex.: domingo entre sábado e segunda).
+      let onlyRestDays = true;
+      for (let skipped = 1; skipped < diffDays; skipped += 1) {
+        const skippedDate = new Date(orderedDays[index - 1] + skipped * 86_400_000);
+        if (!restDays.has(skippedDate.getUTCDay())) {
+          onlyRestDays = false;
+          break;
+        }
+      }
+      if (onlyRestDays) {
+        current += 1;
+        if (current > longest) {
+          longest = current;
+        }
+        continue;
+      }
+    }
+
+    if (diffDays > 1) {
       current = 1;
     }
   }
@@ -161,12 +206,13 @@ export function computeGamificationSnapshot(params: {
   plannerBlocks: StudyBlock[];
   analytics: AnalyticsStore;
   now?: Date;
+  restDays?: number[];
 }): GamificationSnapshot {
-  const { plannerBlocks, analytics, now = new Date() } = params;
+  const { plannerBlocks, analytics, now = new Date(), restDays } = params;
   const completedHoursByDate = buildCompletedHoursByDate(plannerBlocks);
   const dailyAnalytics = analytics.daily || {};
-  const streak = computeStudyStreak(dailyAnalytics, completedHoursByDate, now);
-  const longestStreak = computeLongestStudyStreak(dailyAnalytics, completedHoursByDate);
+  const streak = computeStudyStreak(dailyAnalytics, completedHoursByDate, now, { restDays });
+  const longestStreak = computeLongestStudyStreak(dailyAnalytics, completedHoursByDate, { restDays });
 
   const minutesFromBlocks = plannerBlocks.reduce((sum, block) => {
     if (block.isBreak || block.status !== 'completed') return sum;

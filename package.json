@@ -25,6 +25,7 @@
     "test:smoke:presets": "tsx scripts/smoke-presets.ts",
     "test:backlog": "tsx scripts/backlog-rescheduler.test.ts",
     "test:gamification": "tsx scripts/gamification.test.ts",
+    "test:year-simulation": "tsx scripts/year-simulation.test.ts",
     "test:trainer-dashboard": "playwright test scripts/trainer-dashboard-audit.spec.cjs --reporter=line"
   },
   "dependencies": {

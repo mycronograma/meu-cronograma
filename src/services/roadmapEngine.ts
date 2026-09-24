@@ -6,7 +6,14 @@ import type {
   SubjectPerformanceProfile,
   UserLearningLevel,
 } from '@/types';
-import { generateId, minutesToTime, timeToMinutes, toLocalDateKey, parseBlockDate } from '@/lib/utils';
+import {
+  generateId,
+  minutesToTime,
+  timeToMinutes,
+  toLocalDateKey,
+  parseBlockDate,
+  parseLocalDateKey,
+} from '@/lib/utils';
 import {
   getEnemDisciplineByName,
   isEnemGoal,
@@ -38,12 +45,29 @@ export interface SubjectMeta {
   tipo?: SessionType;
 }
 
+/**
+ * Revisões espaçadas que ficaram pendentes fora da janela gerada.
+ * Chave = data (YYYY-MM-DD), valor = ids das disciplinas que precisam de revisão nesse dia.
+ */
+export type PendingReviewsByDate = Record<string, string[]>;
+
 export interface ChronologicalScheduleConfig {
   subjects: Subject[];
   preferences: StudyPreferences;
   targetDate?: Date;
   startDate: Date;
   endDate: Date;
+  /**
+   * Início real da jornada de estudos (não o início da janela gerada).
+   * Usado para fases pedagógicas e liberação de simulados. Sem ele, gerar o
+   * cronograma semana a semana nunca libera simulado (o contador começa do zero
+   * a cada geração).
+   */
+  pedagogicalStartDate?: Date;
+  /** Revisões espaçadas pendentes de gerações anteriores. */
+  pendingReviews?: PendingReviewsByDate;
+  /** Data do último simulado já concluído/agendado, para respeitar o intervalo entre simulados. */
+  lastSimuladoDate?: Date;
   preferredStart: string;
   preferredEnd: string;
   maxBlockMinutes: number;
@@ -56,6 +80,8 @@ export interface ChronologicalScheduleConfig {
   completedLessonsBySubject?: Record<string, number>;
   completedPracticeTotal?: number;
   completedPracticeBySubject?: Record<string, number>;
+  completedReviewsBySubject?: Record<string, number>;
+  completedSimuladosBySubject?: Record<string, number>;
   performanceMetricsBySubject?: Record<string, SubjectPerformanceProfile>;
   userLevel?: UserLearningLevel;
   adaptiveNow?: Date;
@@ -78,6 +104,8 @@ export interface ChronologicalScheduleResult {
   subjectDistribution: Record<string, number>;
   phaseByDate: Record<string, string>;
   debugLog: string[];
+  /** Revisões espaçadas que caíram depois do fim da janela e devem voltar na próxima geração. */
+  pendingReviews: PendingReviewsByDate;
   cacheHit?: boolean;
 }
 
@@ -153,6 +181,11 @@ const PEDAGOGICAL_STEP_INDEX: Record<SessionType, number> = {
 };
 const PEDAGOGICAL_STEP_TOTAL = 4;
 const ROADMAP_CACHE_TTL_MS = 2 * 60 * 1000;
+/**
+ * Quanto tempo uma revisão espaçada pode ficar esperando fora da janela gerada.
+ * Cobre o intervalo de 30 dias usado pelo ciclo de revisão.
+ */
+const MAX_PENDING_REVIEW_DAYS = 35;
 const roadmapScheduleCache = new Map<
   string,
   { createdAt: number; result: ChronologicalScheduleResult }
@@ -175,6 +208,9 @@ function cloneScheduleResult(result: ChronologicalScheduleResult, cacheHit?: boo
     subjectDistribution: { ...result.subjectDistribution },
     phaseByDate: { ...result.phaseByDate },
     debugLog: [...result.debugLog],
+    pendingReviews: Object.fromEntries(
+      Object.entries(result.pendingReviews ?? {}).map(([dateKey, subjectIds]) => [dateKey, [...subjectIds]])
+    ),
     cacheHit,
   };
 }
@@ -315,8 +351,12 @@ const phaseForWeek = (weekIndex: number) => {
   return { key: 'consolidacao', label: 'Consolidação' };
 };
 
-export function getPhaseForDate(date: Date, startDate: Date) {
-  const diff = Math.floor((date.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+export function getPhaseForDate(date: Date, startDate?: Date) {
+  // Sem uma data de início válida, trata a própria data como início (fase base)
+  // em vez de quebrar a tela com "Cannot read properties of undefined".
+  const safeStartDate =
+    startDate && !Number.isNaN(startDate.getTime()) ? startDate : date;
+  const diff = Math.floor((date.getTime() - safeStartDate.getTime()) / (1000 * 60 * 60 * 24));
   const weekIndex = Math.floor(diff / 7) + 1;
   return phaseForWeek(weekIndex);
 }
@@ -538,6 +578,9 @@ export function generateChronologicalSchedule(config: ChronologicalScheduleConfi
         preferences: config.preferences,
         startDate: config.startDate,
         endDate: config.endDate,
+        pedagogicalStartDate: config.pedagogicalStartDate,
+        pendingReviews: config.pendingReviews,
+        lastSimuladoDate: config.lastSimuladoDate,
         preferredStart: config.preferredStart,
         preferredEnd: config.preferredEnd,
         maxBlockMinutes: config.maxBlockMinutes,
@@ -550,6 +593,8 @@ export function generateChronologicalSchedule(config: ChronologicalScheduleConfi
         completedLessonsBySubject: config.completedLessonsBySubject,
         completedPracticeTotal: config.completedPracticeTotal,
         completedPracticeBySubject: config.completedPracticeBySubject,
+        completedReviewsBySubject: config.completedReviewsBySubject,
+        completedSimuladosBySubject: config.completedSimuladosBySubject,
         simuladoRules: config.simuladoRules,
         userLevel,
         examDate: config.preferences.examDate,
@@ -576,6 +621,9 @@ export function generateChronologicalSchedule(config: ChronologicalScheduleConfi
     ? config.preferences.daysOfWeek
     : allDays;
   const activeDays = preferredDays.filter((day) => !restDays.includes(day));
+  // Quando o estudante gera o cronograma semana a semana, a janela gerada não é o
+  // início da jornada. Sem separar os dois, fases e simulados nunca avançam.
+  const pedagogicalStartDate = config.pedagogicalStartDate ?? config.startDate;
   const excludeDays = allDays.filter((day) => !activeDays.includes(day));
   const subjectMeta = new Map(config.subjects.map((s) => [s.id, inferSubjectMeta(s)]));
   const simuladoSubject = createSimuladoSubject();
@@ -590,11 +638,13 @@ export function generateChronologicalSchedule(config: ChronologicalScheduleConfi
     minDaysBeforeAreaSimulated: 7,
     ...(config.simuladoRules || {}),
   };
-  let lastSimuladoDate: Date | null = null;
+  let lastSimuladoDate: Date | null = config.lastSimuladoDate ? new Date(config.lastSimuladoDate) : null;
   const completedLessonsTotal = config.completedLessonsTotal ?? 0;
   const completedLessonsBySubject = config.completedLessonsBySubject ?? {};
   const completedPracticeTotal = config.completedPracticeTotal ?? 0;
   const completedPracticeBySubject = config.completedPracticeBySubject ?? {};
+  const completedReviewsBySubject = config.completedReviewsBySubject ?? {};
+  const completedSimuladosBySubject = config.completedSimuladosBySubject ?? {};
   const performanceMetricsBySubject = config.performanceMetricsBySubject ?? {};
   const adaptiveScoreBySubject = new Map<string, number>(
     config.subjects.map((subject) => [
@@ -613,9 +663,16 @@ export function generateChronologicalSchedule(config: ChronologicalScheduleConfi
     .slice(0, 3)
     .map((subject) => subject.id);
 
-  const canScheduleSimuladoArea = (date: Date) => {
+  const hasSimuladoIntervalElapsed = (date: Date) => {
+    if (!lastSimuladoDate) return true;
+    const gap = Math.floor((date.getTime() - lastSimuladoDate.getTime()) / (1000 * 60 * 60 * 24));
+    return gap >= simuladoRules.frequencyDays;
+  };
+
+  /** Conteúdo já permite um simulado por área (ignora o intervalo entre simulados). */
+  const isSimuladoAreaContentReady = (date: Date) => {
     const daysSinceStart = Math.floor(
-      (date.getTime() - config.startDate.getTime()) / (1000 * 60 * 60 * 24)
+      (date.getTime() - pedagogicalStartDate.getTime()) / (1000 * 60 * 60 * 24)
     );
     const plannedLessonsTotal = Array.from(plannedLessonsBySubject.values()).reduce((sum, count) => sum + count, 0);
     const plannedPracticeTotal = Array.from(plannedPracticeBySubject.values()).reduce((sum, count) => sum + count, 0);
@@ -627,9 +684,14 @@ export function generateChronologicalSchedule(config: ChronologicalScheduleConfi
     return true;
   };
 
-  const canScheduleSimuladoCompleto = (date: Date) => {
+  /** Simulado por área liberado agora (conteúdo pronto + intervalo entre simulados ok). */
+  const canScheduleSimuladoArea = (date: Date) =>
+    isSimuladoAreaContentReady(date) && hasSimuladoIntervalElapsed(date);
+
+  /** Conteúdo já permite o simulado completo (ignora o intervalo entre simulados). */
+  const isSimuladoCompletoContentReady = (date: Date) => {
     const daysSinceStart = Math.floor(
-      (date.getTime() - config.startDate.getTime()) / (1000 * 60 * 60 * 24)
+      (date.getTime() - pedagogicalStartDate.getTime()) / (1000 * 60 * 60 * 24)
     );
     const plannedLessonsTotal = Array.from(plannedLessonsBySubject.values()).reduce((sum, count) => sum + count, 0);
     const plannedPracticeTotal = Array.from(plannedPracticeBySubject.values()).reduce((sum, count) => sum + count, 0);
@@ -646,14 +708,12 @@ export function generateChronologicalSchedule(config: ChronologicalScheduleConfi
       );
       if (!ready) return false;
     }
-    if (lastSimuladoDate) {
-      const gap = Math.floor(
-        (date.getTime() - lastSimuladoDate.getTime()) / (1000 * 60 * 60 * 24)
-      );
-      if (gap < simuladoRules.frequencyDays) return false;
-    }
     return true;
   };
+
+  /** Simulado completo liberado agora (conteúdo pronto + intervalo entre simulados ok). */
+  const canScheduleSimuladoCompleto = (date: Date) =>
+    isSimuladoCompletoContentReady(date) && hasSimuladoIntervalElapsed(date);
 
   const contentPreference = mapStudyStyleToContentPreference(
     config.preferences.studyStyle,
@@ -728,10 +788,84 @@ export function generateChronologicalSchedule(config: ChronologicalScheduleConfi
 
   const phaseByDate: Record<string, string> = {};
   const reviewQueue = new Map<string, string[]>();
+  const pendingReviews: PendingReviewsByDate = {};
+  const validSubjectIds = new Set(config.subjects.map((subject) => subject.id));
+  const maxReviewDate = new Date(config.endDate);
+  maxReviewDate.setHours(0, 0, 0, 0);
+  maxReviewDate.setDate(maxReviewDate.getDate() + MAX_PENDING_REVIEW_DAYS);
+
+  /**
+   * Empurra a revisão para o próximo dia de estudo válido dentro da janela.
+   * Quando o dia válido fica depois da janela, a revisão é devolvida em
+   * `pendingReviews` para ser cobrada na próxima geração (revisão espaçada 7d/30d
+   * deixa de ser perdida quando o cronograma é gerado semana a semana).
+   */
+  const queueReview = (reviewDate: Date, subjectId: string) => {
+    const cursor = new Date(reviewDate);
+    cursor.setHours(0, 0, 0, 0);
+
+    for (let guard = 0; guard < 60; guard += 1) {
+      if (!activeDays.includes(cursor.getDay())) {
+        cursor.setDate(cursor.getDate() + 1);
+        continue;
+      }
+
+      const dateKey = toLocalDateKey(cursor);
+      if (cursor > config.endDate || cursor > maxReviewDate) {
+        const list = pendingReviews[dateKey] ?? [];
+        if (!list.includes(subjectId)) list.push(subjectId);
+        pendingReviews[dateKey] = list;
+        return;
+      }
+
+      if (cursor < config.startDate) {
+        // Revisão atrasada (gerações anteriores): cobra o quanto antes.
+        cursor.setTime(config.startDate.getTime());
+        continue;
+      }
+
+      const list = reviewQueue.get(dateKey) ?? [];
+      if (!list.includes(subjectId)) list.push(subjectId);
+      reviewQueue.set(dateKey, list);
+      return;
+    }
+  };
+
+  // Revisões herdadas de gerações anteriores (7d/30d) entram na fila desta janela.
+  Object.entries(config.pendingReviews ?? {}).forEach(([dateKey, subjectIds]) => {
+    const parsed = parseLocalDateKey(dateKey);
+    if (!parsed) return;
+    subjectIds
+      .filter((subjectId) => validSubjectIds.has(subjectId))
+      .forEach((subjectId) => queueReview(parsed, subjectId));
+  });
+
   const plannedLessonsBySubject = new Map<string, number>();
   const plannedPracticeBySubject = new Map<string, number>();
   const blocks: StudyBlock[] = [];
   const cycleStateBySubject = new Map<string, SubjectCycleState>();
+
+  /**
+   * O ciclo pedagógico (aula → exercícios → revisão → simulado) é reconstruído a
+   * partir do que o estudante já concluiu. Sem isso, cada geração semana a semana
+   * recomeça em "aula" e o simulado nunca chega.
+   */
+  const seedCycleStage = (subjectId: string) => {
+    const lessons = completedLessonsBySubject[subjectId] ?? 0;
+    const practice = completedPracticeBySubject[subjectId] ?? 0;
+    const reviews = completedReviewsBySubject[subjectId] ?? 0;
+    const simulados = completedSimuladosBySubject[subjectId] ?? 0;
+
+    if (lessons <= 0) return 0;
+    if (practice <= 0) return 1;
+    if (reviews <= 0) return 2;
+    if (simulados <= 0) return 3;
+    // Ciclo completo: volta para conteúdo novo, como no avanço interno do ciclo.
+    return 0;
+  };
+  config.subjects.forEach((subject) => {
+    cycleStateBySubject.set(subject.id, { stageIndex: seedCycleStage(subject.id), stageProgress: 0 });
+  });
   const topicIndexBySubject = new Map<string, number>();
   const globalUsage = new Map<string, number>();
   const globalRecentSubjects: string[] = [];
@@ -861,6 +995,7 @@ export function generateChronologicalSchedule(config: ChronologicalScheduleConfi
       );
       let cycleStageMatched = false;
       let queuedReviewOverride = false;
+      let simuladoDeferred = false;
 
       if (reviewIndex.get(chosen.subject.id) && alreadyHasLesson) {
         sessionType = 'revisao';
@@ -892,7 +1027,13 @@ export function generateChronologicalSchedule(config: ChronologicalScheduleConfi
         const shouldArea = canScheduleSimuladoArea(date);
         const shouldCompleto = canScheduleSimuladoCompleto(date);
         if (!shouldArea && !shouldCompleto) {
-          // Keep the cycle waiting for simulado and reinforce with practice meanwhile.
+          // Sem espaço na agenda para simulado agora: reforça com prática/aula.
+          // Se o conteúdo já está pronto e só o intervalo entre simulados bloqueou,
+          // o ciclo avança mesmo assim — do contrário a matéria ficava presa na
+          // etapa de simulado e nunca voltava para conteúdo novo.
+          const contentReady =
+            isSimuladoAreaContentReady(date) || isSimuladoCompletoContentReady(date);
+          simuladoDeferred = contentReady;
           sessionType = alreadyHasLesson ? 'pratica' : 'teoria';
           cycleStageMatched = false;
         }
@@ -1000,6 +1141,13 @@ export function generateChronologicalSchedule(config: ChronologicalScheduleConfi
         lastSimuladoDate = new Date(date);
       }
 
+      if (simuladoDeferred && expectedCycleStage === 'simulado') {
+        // Simulado adiado por causa do intervalo entre simulados: o ciclo é liberado
+        // para a disciplina voltar a conteúdo novo em vez de ficar presa na etapa.
+        cycleStateBySubject.set(chosen.subject.id, { stageIndex: 0, stageProgress: 0 });
+        simuladoDeferred = false;
+      }
+
       if (
         cycleStageMatched &&
         !queuedReviewOverride &&
@@ -1027,11 +1175,7 @@ export function generateChronologicalSchedule(config: ChronologicalScheduleConfi
         reviewOffsets.forEach((offset) => {
           const reviewDate = new Date(date);
           reviewDate.setDate(reviewDate.getDate() + offset);
-          if (reviewDate < config.startDate || reviewDate > config.endDate) return;
-          const key = toLocalDateKey(reviewDate);
-          const list = reviewQueue.get(key) || [];
-          list.push(chosen.subject.id);
-          reviewQueue.set(key, list);
+          queueReview(reviewDate, chosen.subject.id);
         });
       }
       if (sessionType === 'pratica') {
@@ -1135,6 +1279,7 @@ export function generateChronologicalSchedule(config: ChronologicalScheduleConfi
     totalHours: Number((totalMinutes / 60).toFixed(1)),
     subjectDistribution,
     phaseByDate,
+    pendingReviews,
     debugLog,
   };
 

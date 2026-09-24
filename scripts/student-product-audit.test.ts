@@ -139,3 +139,50 @@ assert.deepStrictEqual(
 );
 
 console.log('student product audit tests passed');
+
+// ---------------------------------------------------------------------------
+// Sequência de dias com descanso configurado
+// ---------------------------------------------------------------------------
+const restDayNow = new Date(2026, 4, 23, 20, 0, 0); // sábado
+const lastNonRestDayStreak = 6; // sáb, sex, qui, qua, ter, seg antes do domingo
+const sixDaysPerWeek: AnalyticsStore['daily'] = {};
+for (let offset = 0; offset < 21; offset += 1) {
+  const date = new Date(restDayNow);
+  date.setDate(restDayNow.getDate() - offset);
+  if (date.getDay() === 0) continue; // domingo é descanso
+  sixDaysPerWeek[
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+      date.getDate()
+    ).padStart(2, '0')}`
+  ] = { hours: 2, sessions: 2 };
+}
+
+assert.strictEqual(
+  computeStudyStreak(sixDaysPerWeek, {}, restDayNow),
+  lastNonRestDayStreak,
+  'sem informar os dias de descanso a sequência quebra no domingo'
+);
+
+assert.strictEqual(
+  computeStudyStreak(sixDaysPerWeek, {}, restDayNow, { restDays: [0] }),
+  18,
+  'domingo de descanso não deve quebrar a sequência de quem estuda 6 dias por semana'
+);
+
+const gamificationWithRest = computeGamificationSnapshot({
+  plannerBlocks: [],
+  analytics: { daily: sixDaysPerWeek },
+  now: restDayNow,
+  restDays: [0],
+});
+assert.strictEqual(
+  gamificationWithRest.streak,
+  18,
+  'snapshot de gamificação deve respeitar os dias de descanso'
+);
+assert.ok(
+  gamificationWithRest.longestStreak >= 18,
+  'recorde de sequência deve considerar os dias de descanso'
+);
+
+console.log('rest day streak tests passed');

@@ -3,9 +3,7 @@
  */
 
 import { redirect } from 'next/navigation';
-import { getServerSession } from 'next-auth';
 import { MainLayout } from '@/components/layout';
-import { authOptions } from '@/lib/auth';
 
 export default async function AppLayout({
   children,
@@ -16,8 +14,16 @@ export default async function AppLayout({
     process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_LOCAL_DEMO_MODE === 'true';
 
   if (isLocalDemoMode) {
+    // Modo demo local: nenhuma checagem de sessão (e nenhum acesso ao banco).
     return <MainLayout>{children}</MainLayout>;
   }
+
+  // Import tardio: em modo demo não carregamos NextAuth/Prisma por causa deste
+  // layout, o que evita 500 em quem só quer navegar nas telas sem banco.
+  const [{ getServerSession }, { authOptions }] = await Promise.all([
+    import('next-auth'),
+    import('@/lib/auth'),
+  ]);
 
   const session = await getServerSession(authOptions);
 
