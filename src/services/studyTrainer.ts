@@ -213,7 +213,7 @@ export const TRAINER_ACHIEVEMENTS: TrainerAchievementDefinition[] = [
   },
   {
     id: 'subject-mastered',
-    name: 'Primeira materia dominada',
+    name: 'Primeira matéria dominada',
     description: 'Alcance boa consistencia em uma disciplina.',
     icon: 'graduation-cap',
     xpReward: 100,

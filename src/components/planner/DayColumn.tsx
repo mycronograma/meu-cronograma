@@ -158,7 +158,7 @@ export default function DayColumn({
                 type="button"
                 onClick={() => onAdjustStudyLoad(date, -1)}
                 className="min-h-[34px] rounded-lg border border-white/15 bg-white/[0.02] px-2.5 py-1 text-xs text-text-secondary transition-colors hover:border-neon-blue/50 hover:text-neon-blue"
-                aria-label="Diminuir uma materia deste dia"
+                aria-label="Diminuir uma matéria deste dia"
               >
                 Diminuir matéria
               </button>
@@ -166,7 +166,7 @@ export default function DayColumn({
                 type="button"
                 onClick={() => onAdjustStudyLoad(date, 1)}
                 className="min-h-[34px] rounded-lg border border-white/15 bg-white/[0.02] px-2.5 py-1 text-xs text-text-secondary transition-colors hover:border-neon-blue/50 hover:text-neon-blue"
-                aria-label="Aumentar uma materia neste dia"
+                aria-label="Aumentar uma matéria neste dia"
               >
                 Aumentar matéria
               </button>

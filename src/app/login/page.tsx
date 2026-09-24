@@ -19,7 +19,7 @@ import {
 const DEFAULT_CALLBACK_URL = '/dashboard';
 
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
-  CredentialsSignin: 'E-mail ou senha invalidos.',
+  CredentialsSignin: 'E-mail ou senha inválidos.',
   EmailNotVerified: 'Valide o código enviado ao seu e-mail antes de entrar.',
   AccessDenied: 'Acesso negado. Verifique suas credenciais.',
   OAuthAccountNotLinked:
@@ -27,10 +27,10 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
   OAuthSignin: 'Falha ao iniciar login social. Tente novamente.',
   OAuthCallback: 'Falha na validacao do login social. Tente novamente.',
   Configuration:
-    'Falha de configuracao no servidor. Verifique NEXTAUTH_SECRET e DATABASE_URL.',
+    'Falha de configuração no servidor. Verifique NEXTAUTH_SECRET e DATABASE_URL.',
   Callback:
-    'Falha ao validar sua sessao. Tente novamente ou contate o suporte.',
-  SessionRequired: 'Sua sessao expirou. Faca login novamente.',
+    'Falha ao validar sua sessão. Tente novamente ou contate o suporte.',
+  SessionRequired: 'Sua sessão expirou. Faça login novamente.',
 };
 
 const mapAuthErrorMessage = (errorCode?: string | null) => {
@@ -139,7 +139,7 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
-    setInfoMessage(queryState.resetSuccess ? 'Senha redefinida com sucesso. Faca login.' : null);
+    setInfoMessage(queryState.resetSuccess ? 'Senha redefinida com sucesso. Faça login.' : null);
     if (queryState.authError) {
       setErrorMessage(mapAuthErrorMessage(queryState.authError));
       setLinkMessage(

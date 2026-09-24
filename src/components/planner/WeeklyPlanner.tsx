@@ -863,7 +863,7 @@ export default function WeeklyPlanner({
       });
 
     if (movableStudyBlocks.length === 0) {
-      return { changed: false, blocks, message: 'Nao ha materias futuras para reorganizar.' };
+      return { changed: false, blocks, message: 'Não há matérias futuras para reorganizar.' };
     }
 
     const fixedBlocks = blocks.filter((block) => {
@@ -967,7 +967,7 @@ export default function WeeklyPlanner({
         return {
           changed: false,
           blocks,
-          message: 'Nao consegui reorganizar toda a fila dentro dos horarios disponiveis.',
+          message: 'Não consegui reorganizar toda a fila dentro dos horários disponíveis.',
         };
       }
     }
@@ -1065,14 +1065,14 @@ export default function WeeklyPlanner({
         })[0];
 
       if (!nextFutureBlock) {
-        setBacklogNotice('Nao ha materia futura para adiantar.');
+        setBacklogNotice('Não há matéria futura para adiantar.');
         return;
       }
 
       const targetStudyMinutes = currentStudyMinutes + nextFutureBlock.durationMinutes;
       const result = reflowStudyQueueFromDate(sourceDate, { [key]: targetStudyMinutes });
       if (!result.changed) {
-        setBacklogNotice(result.message || 'Nao foi possivel adiantar outra materia para este dia.');
+        setBacklogNotice(result.message || 'Não foi possível adiantar outra matéria para este dia.');
         return;
       }
 
@@ -1081,13 +1081,13 @@ export default function WeeklyPlanner({
         keepOnlyRelevantDailyLimit(prev, targetStudyMinutes > baseLimit ? targetStudyMinutes : undefined)
       );
       commitBlocksUpdate(result.blocks);
-      setBacklogNotice('Agenda recalculada: uma materia foi adiantada e os proximos dias foram puxados.');
+      setBacklogNotice('Agenda recalculada: uma matéria foi adiantada e os próximos dias foram puxados.');
       return;
     }
 
     const movableToday = dayBlocks.filter((block) => canReflowStudyBlock(block));
     if (movableToday.length === 0) {
-      setBacklogNotice('Nao ha materia editavel neste dia para diminuir.');
+      setBacklogNotice('Não há matéria editável neste dia para diminuir.');
       return;
     }
 
@@ -1095,13 +1095,13 @@ export default function WeeklyPlanner({
     const targetStudyMinutes = Math.max(0, currentStudyMinutes - lastStudyBlock.durationMinutes);
     const result = reflowStudyQueueFromDate(sourceDate, { [key]: targetStudyMinutes });
     if (!result.changed) {
-      setBacklogNotice(result.message || 'Nao foi possivel diminuir a carga deste dia.');
+      setBacklogNotice(result.message || 'Não foi possível diminuir a carga deste dia.');
       return;
     }
 
     setDailyLimits((prev) => keepOnlyRelevantDailyLimit(prev, targetStudyMinutes));
     commitBlocksUpdate(result.blocks);
-    setBacklogNotice('Agenda recalculada: uma materia saiu deste dia e a fila foi empurrada.');
+    setBacklogNotice('Agenda recalculada: uma matéria saiu deste dia e a fila foi empurrada.');
   };
 
   /* eslint-disable react-hooks/exhaustive-deps */
@@ -1228,7 +1228,7 @@ export default function WeeklyPlanner({
     const cleanedBlocks = removeOrphanAutoBreaks(blocks);
     if (cleanedBlocks.length === blocks.length) return;
     commitBlocksUpdate(cleanedBlocks);
-    setBacklogNotice('Removi intervalos soltos e deixei a agenda encadeada entre materias.');
+    setBacklogNotice('Removi intervalos soltos e deixei a agenda encadeada entre matérias.');
   }, [blocks]);
   /* eslint-enable react-hooks/exhaustive-deps */
 

@@ -199,7 +199,7 @@ export default function QuickSessionModal({
         source: 'task',
         sourceId: selectedSubject.id,
         amount: xpEarned,
-        reason: `Sessao rapida: ${selectedSubject.name}`,
+        reason: `Sessão rápida: ${selectedSubject.name}`,
         awardedAt: now.toISOString(),
         dateKey,
         metadata: {

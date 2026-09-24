@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
     if (!isValidSubscription(subscription)) {
       return NextResponse.json(
-        { success: false, error: 'Assinatura de notificacao invalida.' },
+        { success: false, error: 'Assinatura de notificação inválida.' },
         { status: 400 }
       );
     }

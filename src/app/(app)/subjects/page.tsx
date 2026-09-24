@@ -290,7 +290,7 @@ export default function SubjectsPage() {
 
       const data = await response.json();
       if (!data.success || !Array.isArray(data.data?.blocks)) {
-        throw new Error(data.error || 'Resposta invalida da regeneracao');
+        throw new Error(data.error || 'Resposta inválida da regeneração');
       }
 
       setPlannerBlocks(data.data.blocks.map(deserializeBlock));

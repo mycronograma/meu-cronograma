@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null);
     if (!isRecord(body) || typeof body.blockId !== 'string') {
       return NextResponse.json(
-        { success: false, error: 'Bloco de estudo invalido.' },
+        { success: false, error: 'Bloco de estudo inválido.' },
         { status: 400 }
       );
     }
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     const minutesSpent = readPositiveMinutes(body.minutesSpent);
     if (!minutesSpent) {
       return NextResponse.json(
-        { success: false, error: 'Tempo de estudo invalido.' },
+        { success: false, error: 'Tempo de estudo inválido.' },
         { status: 400 }
       );
     }
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
 
     if (!block || block.isBreak) {
       return NextResponse.json(
-        { success: false, error: 'Missao de estudo nao encontrada.' },
+        { success: false, error: 'Missão de estudo não encontrada.' },
         { status: 404 }
       );
     }
@@ -98,7 +98,7 @@ export async function POST(request: Request) {
       });
 
       if (!user) {
-        throw new Error('Usuario nao encontrado.');
+        throw new Error('Usuário não encontrado.');
       }
 
       const newTotalXp = Math.max(0, user.xp + xpEarned);
@@ -174,7 +174,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Gamification complete error:', error);
     return NextResponse.json(
-      { success: false, error: 'Falha ao validar XP da sessao.' },
+      { success: false, error: 'Falha ao validar XP da sessão.' },
       { status: 500 }
     );
   }

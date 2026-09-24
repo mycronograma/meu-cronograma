@@ -304,7 +304,7 @@ export const recalculateStudyNotificationSchedule = ({
     const timerId = setTimeout(() => {
       const blockTitle = getStudyBlockDisplayTitle(entry.block);
       void showStudyNotification({
-        title: `Proxima sessao: ${blockTitle}`,
+        title: `Próxima sessão: ${blockTitle}`,
         body: buildNotificationBody(entry.block, startAt, entry.preview.minutesBefore),
         tag: `study-block-${entry.block.id}-${notifyAt.getTime()}`,
         silent: !normalized.notificationSoundEnabled,

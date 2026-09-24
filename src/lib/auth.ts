@@ -27,7 +27,7 @@ providers.push(
           where: { email },
         });
       } catch (error) {
-        console.error('Erro ao consultar usuario para login:', error);
+        console.error('Erro ao consultar usuário para login:', error);
         throw new Error('Configuration');
       }
 

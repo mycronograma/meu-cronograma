@@ -1077,7 +1077,7 @@ export default function SettingsPage() {
         setDeleteStep('idle');
         setDeleteFeedback({
           type: 'success',
-          message: 'Sessao de teste limpa. Redirecionando...',
+          message: 'Sessão de teste limpa. Redirecionando...',
         });
         setTimeout(() => router.replace('/login'), 350);
         return;

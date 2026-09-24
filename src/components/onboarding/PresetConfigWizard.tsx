@@ -67,7 +67,7 @@ const PRESET_FLOW_OPTIONS: Array<{ value: boolean; label: string; desc: string }
   {
     value: true,
     label: 'Ciclo completo',
-    desc: 'Garante 1 aula de cada materia antes de repetir.',
+    desc: 'Garante 1 aula de cada matéria antes de repetir.',
   },
   {
     value: false,
