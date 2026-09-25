@@ -25,7 +25,8 @@
     "test:smoke:presets": "tsx scripts/smoke-presets.ts",
     "test:backlog": "tsx scripts/backlog-rescheduler.test.ts",
     "test:gamification": "tsx scripts/gamification.test.ts",
-    "test:trainer-dashboard": "playwright test scripts/trainer-dashboard-audit.spec.cjs --reporter=line"
+    "test:trainer-dashboard": "playwright test scripts/trainer-dashboard-audit.spec.cjs --reporter=line",
+    "test:e2e:check": "node scripts/check-e2e-prerequisites.cjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",
