@@ -10,6 +10,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSession } from 'next-auth/react';
 import { signOut } from 'next-auth/react';
+import { signOutAndClearProgress } from '@/lib/signOutAndClearProgress';
 import {
   User,
   Clock,
@@ -990,7 +991,7 @@ export default function SettingsPage() {
         return;
       }
 
-      await signOut({ callbackUrl: '/login' });
+      await signOutAndClearProgress();
     } catch (error) {
       setGeneralDangerFeedback({
         type: 'error',

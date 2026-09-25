@@ -4,6 +4,7 @@ const BLOCK_TYPE_LABELS: Record<StudyBlockType, string> = {
   AULA: 'Aula',
   EXERCICIOS: 'Exercícios',
   REVISAO: 'Revisão',
+  REVISAO_ATIVA: 'Revisão ativa',
   SIMULADO_AREA: 'Simulado (Área)',
   SIMULADO_COMPLETO: 'Simulado (Completo)',
   ANALISE: 'Correção',
