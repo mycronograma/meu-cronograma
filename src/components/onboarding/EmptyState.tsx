@@ -9,6 +9,7 @@ import { motion } from 'framer-motion';
 import { Plus, Sparkles, ArrowRight, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button, Card } from '@/components/ui';
+import { useMotionPrefs } from '@/hooks/useMotionPrefs';
 
 interface EmptyStateProps {
   icon: LucideIcon;
@@ -39,9 +40,11 @@ export default function EmptyState({
   motivationalMessage,
   className,
 }: EmptyStateProps) {
+  const { animate: shouldAnimate } = useMotionPrefs();
+
   const content = (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={shouldAnimate ? { opacity: 0, y: 20 } : false}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
         'flex flex-col items-center justify-center text-center',
@@ -51,23 +54,26 @@ export default function EmptyState({
     >
       {/* Animated Icon */}
       <motion.div
-        initial={{ scale: 0 }}
+        initial={shouldAnimate ? { scale: 0 } : false}
         animate={{ scale: 1 }}
-        transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
+        transition={shouldAnimate ? { delay: 0.2, type: 'spring', stiffness: 200 } : { duration: 0 }}
         className="relative mb-6"
       >
         <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-neon-blue/20 to-neon-purple/20 flex items-center justify-center">
-          <Icon className="w-12 h-12 text-neon-blue" />
+          <Icon className="w-12 h-12 text-neon-blue" aria-hidden="true" />
         </div>
-        {/* Decorative rings */}
-        <div className="absolute inset-0 w-24 h-24 rounded-2xl border border-neon-blue/20 animate-ping" />
+        {/* Anel decorativo: só anima quando o sistema permite movimento */}
+        {shouldAnimate && (
+          <div className="absolute inset-0 w-24 h-24 rounded-2xl border border-neon-blue/20 animate-ping" />
+        )}
+        <div className="absolute inset-0 w-24 h-24 rounded-2xl border border-neon-blue/15" />
       </motion.div>
 
       {/* Title */}
       <motion.h3
-        initial={{ opacity: 0 }}
+        initial={shouldAnimate ? { opacity: 0 } : false}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.3 }}
+        transition={{ delay: shouldAnimate ? 0.3 : 0 }}
         className="text-xl font-heading font-bold text-white mb-2"
       >
         {title}
@@ -75,9 +81,9 @@ export default function EmptyState({
 
       {/* Description */}
       <motion.p
-        initial={{ opacity: 0 }}
+        initial={shouldAnimate ? { opacity: 0 } : false}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
+        transition={{ delay: shouldAnimate ? 0.4 : 0 }}
         className="text-text-secondary max-w-md mb-6"
       >
         {description}
@@ -86,9 +92,9 @@ export default function EmptyState({
       {/* Motivational Message */}
       {motivationalMessage && (
         <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
+          initial={shouldAnimate ? { opacity: 0, scale: 0.9 } : false}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.5 }}
+          transition={{ delay: shouldAnimate ? 0.5 : 0 }}
           className="mb-6 px-4 py-3 rounded-xl bg-gradient-to-r from-neon-blue/10 to-neon-purple/10 border border-neon-blue/20"
         >
           <p className="text-sm text-neon-blue flex items-center gap-2">
@@ -100,9 +106,9 @@ export default function EmptyState({
 
       {/* Actions */}
       <motion.div
-        initial={{ opacity: 0 }}
+        initial={shouldAnimate ? { opacity: 0 } : false}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.6 }}
+        transition={{ delay: shouldAnimate ? 0.6 : 0 }}
         className="flex flex-col sm:flex-row items-center gap-3"
       >
         {actionLabel && onAction && (

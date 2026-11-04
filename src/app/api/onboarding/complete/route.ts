@@ -9,9 +9,14 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const answers = body.answers as OnboardingAnswers;
-    const session = await getServerSession(authOptions);
+    // Modo demo local roda sem banco e sem sessão: o onboarding gera o setup
+    // localmente em vez de devolver 401 e travar a tela.
+    const isLocalDemoMode =
+      process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_LOCAL_DEMO_MODE === 'true';
+    const session = isLocalDemoMode ? null : await getServerSession(authOptions);
     const userId = session?.user?.id;
-    if (!userId) {
+
+    if (!isLocalDemoMode && !userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -20,7 +25,11 @@ export async function POST(request: Request) {
     }
 
     const setup = createDefaultOnboardingSetup(answers);
-    setup.profile.userId = userId;
+    setup.profile.userId = userId ?? setup.profile.userId ?? 'local-demo';
+
+    if (!userId) {
+      return NextResponse.json(setup);
+    }
 
     try {
       await prisma.userProfile.upsert({

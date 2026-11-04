@@ -10,7 +10,8 @@ import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useMemo, useRef, useEffect, useCallback, type RefObject } from 'react';
 import { motion } from 'framer-motion';
-import { signOut, useSession } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
+import { signOutAndClearProgress } from '@/lib/signOutAndClearProgress';
 import {
   Flame,
   Bell,
@@ -330,7 +331,7 @@ export default function TopBar({ user }: TopBarProps) {
       return;
     }
 
-    void signOut({ callbackUrl: '/login' });
+    void signOutAndClearProgress();
   }, [router]);
 
   const toggleTheme = useCallback(() => {

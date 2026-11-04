@@ -148,7 +148,7 @@ export default function RegisterPage() {
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        setErrorMessage(payload?.message || 'Codigo invalido.');
+        setErrorMessage(payload?.message || 'Código inválido.');
         return;
       }
 

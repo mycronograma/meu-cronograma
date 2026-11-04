@@ -7,6 +7,7 @@
 
 import { motion, HTMLMotionProps } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { useMotionPrefs } from '@/hooks/useMotionPrefs';
 
 interface CardProps extends HTMLMotionProps<'div'> {
   children: React.ReactNode;
@@ -38,10 +39,14 @@ export default function Card({
   padding = 'md',
   ...props
 }: CardProps) {
+  const { hoverEffects } = useMotionPrefs();
+
   return (
     <motion.div
-      whileHover={hover ? { y: -2 } : undefined}
-      transition={{ duration: 0.2 }}
+      // Sem mouse de verdade (celular/tablet) ou com movimento reduzido, o card
+      // não "levanta" — no toque isso ficava grudado depois do tap.
+      whileHover={hover && hoverEffects ? { y: -2 } : undefined}
+      transition={{ duration: hoverEffects ? 0.2 : 0 }}
       className={cn(
         'glass-card w-full min-w-0',
         paddingStyles[padding],

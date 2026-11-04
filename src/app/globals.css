@@ -42,11 +42,17 @@
   --neon-purple: #7F00FF;
   --neon-cyan: #00FFC8;
   --neon-pink: #FF00AA;
-  
-  /* Text colors */
+  /* Roxo legível como texto: #7F00FF dá 3,19:1 no fundo do app (reprova em AA).
+     Este tom mantém a identidade e chega a 5,20:1. */
+  --neon-violet: #9F5CFF;
+  --focus-ring: rgba(0, 180, 255, 0.85);
+
+  /* Text colors
+     Contrastes no fundo do app (#05080F): primary 20,0:1 · secondary 6,4:1 ·
+     muted 5,1:1 — todos acima do mínimo de 4,5:1 do WCAG AA. */
   --text-primary: #FFFFFF;
   --text-secondary: #8892A6;
-  --text-muted: #4A5568;
+  --text-muted: #758198;
   
   /* Glassmorphism */
   --glass-blur: 12px;
@@ -60,6 +66,39 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+/* Botão/link precisam parecer clicáveis (o Tailwind não aplica isso por padrão) */
+:where(button, [role='button'], summary, label[for]):not(:disabled) {
+  cursor: pointer;
+}
+
+:where(button, a, [role='button']) {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+::selection {
+  background: rgba(0, 180, 255, 0.32);
+  color: #ffffff;
+}
+
+::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+/* Autofill do Chrome pintava o input de branco */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--text-primary);
+  -webkit-box-shadow: 0 0 0 1000px #0f172a inset;
+  box-shadow: 0 0 0 1000px #0f172a inset;
+  caret-color: var(--text-primary);
+  transition: background-color 9999s ease-out 0s;
 }
 
 html {
@@ -116,9 +155,15 @@ canvas {
   max-width: 100%;
 }
 
-:where(a, button, input, select, textarea, [role='button']):focus-visible {
-  outline: 2px solid var(--neon-blue);
-  outline-offset: 3px;
+:where(a, button, input, select, textarea, [role='button'], [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Navegar por teclado não deve parecer o mesmo que clicar com o mouse */
+:where(a, button, input, select, textarea, [role='button']):focus:not(:focus-visible) {
+  outline: none;
 }
 
 .scroll-touch {
@@ -181,6 +226,43 @@ canvas {
   .app-main-content,
   .mobile-container {
     padding-bottom: 28px;
+  }
+}
+
+/* ============================================
+   Movimento reduzido
+   Quem pediu menos animação no sistema recebe uma interface estática:
+   sem deslocamento, sem giro, sem brilho pulsando.
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-ping,
+  .animate-shimmer,
+  .animate-float,
+  .animate-glow,
+  .animate-pulse,
+  .animate-pulse-slow {
+    animation: none !important;
+  }
+}
+
+/* Em telas sem mouse o "hover" grudava após o toque */
+@media (hover: none) {
+  .glass-card {
+    transition: none;
   }
 }
 

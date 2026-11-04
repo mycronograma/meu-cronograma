@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
     if (!settings) {
       return NextResponse.json(
-        { success: false, error: 'Configuracoes ausentes.' },
+        { success: false, error: 'Configurações ausentes.' },
         { status: 400 }
       );
     }

@@ -309,6 +309,15 @@ Sistema inteligente que cria uma trilha pedagógica progressiva:
 | `npm run db:push` | Push schema to database |
 | `npm run db:seed` | Seed database with mock data and presets |
 | `npm run db:studio` | Open Prisma Studio |
+| `npm run test:roadmap` | Testes do roadmap/gerador de cronograma |
+| `npm run test:student-audit` | Auditoria de produto (streak, analytics, presets) |
+| `npm run test:backlog` | Testes do reencaixe de backlog |
+| `npm run test:gamification` | Testes de XP, níveis e conquistas |
+| `npm run test:year-simulation` | Simulação determinística de 1 ano de uso |
+| `npm run test:sync` | Sincronização no servidor (conflitos, tombstones, migração) |
+| `npm run test:sync-client` | Ponta a ponta celular ↔ computador (motor do cliente + API) |
+| `npm run test:ui` | Auditoria de interface (contraste WCAG, movimento, foco, rótulos) |
+| `npm run test:hours` | Auditoria de horas e horários (somas, fusos, reagendamento) |
 
 ## 📡 API Endpoints
 
@@ -396,6 +405,63 @@ CMD ["npm", "start"]
 2. Confirmar que não há 3 blocos seguidos da mesma matéria.
 3. Conferir inserção de revisões 24h / 7d / 30d.
 4. Matérias de maior peso aparecem mais vezes na semana.
+
+## 🎨 Design system e acessibilidade
+
+O tema é escuro, com vidro (glassmorphism) e acentos neon. Regras que o projeto segue
+— e que agora são **verificadas por teste** em `npm run test:ui`:
+
+- **Contraste:** todo token de texto passa no mínimo de 4,5:1 do WCAG AA sobre os fundos
+  do app (`--text-primary` 20:1, `--text-secondary` 6,4:1, `--text-muted` 5,1:1). O roxo de
+  marca (`--neon-purple` #7F00FF) fica só para preenchimento/gradiente; para texto e ícones
+  existe `--neon-violet` (#9F5CFF, 5,2:1);
+- **Movimento:** quem pede menos animação no sistema recebe a interface estática
+  (`prefers-reduced-motion`); os cards não "levantam" no toque em telas sem mouse;
+- **Teclado:** foco visível (`:focus-visible`) em botões, links e campos, com cursor de clique
+  e `aria-label` em botões que só têm ícone;
+- **Feedback de falha:** se o progresso não subir para a conta, aparece um banner explicando
+  que os dados estão salvos no aparelho (antes a falha ficava só no console).
+
+## 🔄 Progresso sincronizado (delta)
+
+O progresso do estudante vive no `localStorage`, mas com conta logada ele também é
+gravado por linha no banco (`Subject`, `StudyBlock`, `StudySession`) e sincronizado
+entre aparelhos:
+
+- **delta**: só o que mudou sobe para o servidor (impressão digital por registro),
+  em vez de enviar o bloco JSON inteiro — o que era ~3 MB depois de um ano de uso;
+- **tombstones**: apagar uma disciplina/bloco em um aparelho apaga no outro
+  (`deletedAt`), sem "ressuscitar" dados;
+- **conflito por registro**: cada alteração carrega a marca de tempo do aparelho
+  (`clientUpdatedAt`); a mais nova vence e o aparelho que perdeu recebe de volta a
+  versão vencedora (`rejected`), então as duas telas convergem;
+- **migração automática**: contas que só têm o blob antigo em
+  `UserProgressSnapshot` viram linhas na primeira sincronização;
+- **o que ainda não virou tabela** (analytics, preferências, XP) continua num
+  snapshot JSON, mas só é enviado quando muda.
+
+Endpoints: `POST /api/sync` (envia o delta e devolve o do servidor) e
+`GET /api/sync` (leitura por cursor). `PUT /api/progress` continua existindo para
+versões antigas do app. O motor do cliente está em `src/lib/clientSync.ts`, a
+mesclagem no servidor em `src/lib/syncDelta.ts` e o núcleo da rota em
+`src/lib/syncServer.ts` — os dois últimos são cobertos por testes sem banco
+(`npm run test:sync` e `npm run test:sync-client`).
+
+Em **modo demo** (sem sessão) nada é enviado ao servidor: o progresso fica no
+navegador.
+
+## 🧪 Simulação de 1 ano
+
+`npm run test:year-simulation` roda um ano inteiro de uso real com o motor de verdade:
+gera o cronograma **semana a semana** (fluxo do wizard/planejador), conclui ~86% dos blocos,
+reencaixa o backlog, atualiza analytics e gamificação, e valida invariantes:
+
+- nenhum bloco em dia de descanso, sobreposto ou acima do limite diário;
+- a agenda continua com aulas, exercícios, revisões **e simulados** ao longo do ano;
+- a sequência de dias passa de 7 dias para quem tem 1 dia de descanso;
+- o volume de dados no navegador fica abaixo do limite do `localStorage`.
+
+Bugs encontrados e corrigidos com o uso dessa simulação estão em [RELATORIO-BUGS.md](RELATORIO-BUGS.md).
 
 ## 📄 License
 

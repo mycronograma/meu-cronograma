@@ -39,6 +39,7 @@ import {
 import { useOnboarding, useLocalStorage } from '@/hooks';
 import { isSameDay, formatDate, formatDuration, formatHoursDuration, getWeekStart, getWeekDates, parseBlockDate } from '@/lib/utils';
 import {
+  buildWeeklyCompletedHoursBySubject,
   buildCompletedHoursByDate,
   buildCompletedSessionsByDate,
   buildMergedDailyStudyData,
@@ -314,24 +315,11 @@ export default function DashboardPage() {
     }, 0);
   }, [analyticsForSummary.daily, completedSessionsByDate]);
 
-  const weeklyCompletedHoursBySubject = useMemo(() => {
-    const weekStart = getWeekStart(new Date());
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 7);
-
-    const totals = new Map<string, number>();
-
-    plannerBlocks.forEach((block) => {
-      if (block.isBreak || block.status !== 'completed' || !block.subjectId) return;
-      const blockDate = parseBlockDate(block.date);
-      if (blockDate < weekStart || blockDate >= weekEnd) return;
-
-      const previous = totals.get(block.subjectId) ?? 0;
-      totals.set(block.subjectId, previous + block.durationMinutes / 60);
-    });
-
-    return totals;
-  }, [plannerBlocks]);
+  // Horas da semana atual por disciplina (mesma base da tela de disciplinas).
+  const weeklyCompletedHoursBySubject = useMemo(
+    () => buildWeeklyCompletedHoursBySubject(plannerBlocks),
+    [plannerBlocks]
+  );
 
   const todayPlan = useMemo(() => {
     const today = new Date();
@@ -669,7 +657,7 @@ export default function DashboardPage() {
               </div>
 
               {completionReward.didLevelUp && (
-                <div className="mt-3 rounded-lg border border-neon-purple/30 bg-neon-purple/10 p-3 text-sm text-neon-purple">
+                <div className="mt-3 rounded-lg border border-neon-purple/30 bg-neon-purple/10 p-3 text-sm text-neon-violet">
                   Você subiu para o nível {completionReward.levelAfter}.
                 </div>
               )}
@@ -841,7 +829,7 @@ export default function DashboardPage() {
                     </h2>
                     <p className="text-sm text-text-secondary">{trainerSnapshot.levelTitle}</p>
                   </div>
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-neon-purple/15 text-neon-purple">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-neon-purple/15 text-neon-violet">
                     <Medal className="h-6 w-6" />
                   </div>
                 </div>
@@ -951,7 +939,7 @@ export default function DashboardPage() {
                 className="glass-card p-4 max-[479px]:p-3 sm:p-6 text-center"
               >
                 <div className="w-16 h-16 max-[479px]:w-12 max-[479px]:h-12 rounded-2xl bg-neon-purple/20 flex items-center justify-center mx-auto mb-4 max-[479px]:mb-3">
-                  <Calendar className="w-8 h-8 max-[479px]:w-6 max-[479px]:h-6 text-neon-purple" />
+                  <Calendar className="w-8 h-8 max-[479px]:w-6 max-[479px]:h-6 text-neon-violet" />
                 </div>
                 <h3 className="font-heading font-bold text-white mb-2">
                   Agenda Inteligente
@@ -1053,7 +1041,7 @@ export default function DashboardPage() {
 
               <Card className="h-full">
                 <div className="mb-4 flex items-center gap-2">
-                  <Trophy className="h-5 w-5 text-neon-purple" />
+                  <Trophy className="h-5 w-5 text-neon-violet" />
                   <h2 className="text-lg font-heading font-bold text-white">Conquistas</h2>
                 </div>
                 <div className="space-y-3">

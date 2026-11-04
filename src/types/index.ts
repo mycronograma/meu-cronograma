@@ -37,7 +37,7 @@ export interface User {
 
 export type AIDifficulty = 'easy' | 'medium' | 'hard' | 'adaptive';
 export type UserLearningLevel = 'iniciante' | 'intermediario' | 'avancado';
-export type StudySessionKind = 'AULA' | 'EXERCICIOS' | 'REVISAO' | 'ANALISE' | 'LIVRE';
+export type StudySessionKind = 'AULA' | 'EXERCICIOS' | 'REVISAO' | 'SIMULADO' | 'ANALISE' | 'LIVRE';
 
 // ============================================
 // Subject Types
@@ -102,7 +102,10 @@ export type StudyBlockType =
   | 'AULA'
   | 'EXERCICIOS'
   | 'REVISAO'
+  | 'SIMULADO_AREA'
+  | 'SIMULADO_COMPLETO'
   | 'ANALISE'
+  // Legado do gerador semanal antigo (studyAlgorithm) — mantido para dados já salvos.
   | 'REVISAO_ATIVA';
 
 export interface StudyBlock {
@@ -118,7 +121,7 @@ export interface StudyBlock {
   durationMinutes: number;
   
   // Roadmap metadata
-  sessionType?: 'teoria' | 'pratica' | 'revisao';
+  sessionType?: 'teoria' | 'pratica' | 'revisao' | 'simulado';
   phase?: string;
   area?: string;
   type?: StudyBlockType;

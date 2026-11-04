@@ -10,6 +10,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSession } from 'next-auth/react';
 import { signOut } from 'next-auth/react';
+import { signOutAndClearProgress } from '@/lib/signOutAndClearProgress';
 import {
   User,
   Clock,
@@ -19,6 +20,7 @@ import {
   AlertTriangle,
   Save,
   RefreshCw,
+  UploadCloud,
   LogOut,
   Trash2,
   RotateCcw,
@@ -35,8 +37,13 @@ import TimePickerField from '@/components/settings/TimePickerField';
 import SystemNotificationsCard from '@/components/settings/SystemNotificationsCard';
 import { useIsMobile, useOnboarding, useLocalStorage } from '@/hooks';
 import { clearClientStoreKeys } from '@/hooks/useLocalStorage';
-import { SERVER_PROGRESS_STORE_KEYS } from '@/hooks/useServerProgressSync';
-import { cn, formatHoursDuration } from '@/lib/utils';
+import {
+  SERVER_PROGRESS_STORE_KEYS,
+  SYNC_STATUS_STORAGE_KEY,
+  type StoredSyncStatus,
+} from '@/hooks/useServerProgressSync';
+import { resetSyncState, syncNow } from '@/lib/clientSync';
+import { cn, formatDate, formatHoursDuration } from '@/lib/utils';
 import { getAiScheduleProfile } from '@/lib/aiScheduleProfiles';
 import type { DailyHoursByWeekday, StudyPreferences, UserSettings, WeekdayKey } from '@/types';
 import { defaultSettings } from '@/lib/defaultSettings';
@@ -212,7 +219,12 @@ export default function SettingsPage() {
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  /** Aviso do botão "Restaurar padrões" (o campo `saveFeedback` é derivado do save). */
+  const [resetNotice, setResetNotice] = useState<string | null>(null);
   const [hasRemotePrefs, setHasRemotePrefs] = useState(false);
+  const [syncStatus] = useLocalStorage<StoredSyncStatus | null>(SYNC_STATUS_STORAGE_KEY, null);
+  const [isSyncingNow, setIsSyncingNow] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const hasAttemptedRemotePrefs = useRef(false);
   const [pendingAlarmSound, setPendingAlarmSound] = useState<UserSettings['alarmSound']>(
     settings.alarmSound || 'pulse'
@@ -816,6 +828,7 @@ export default function SettingsPage() {
           setStudyPrefs(nextStudyPrefs);
           setHasChanges(false);
           setSaveState('saved');
+          setResetNotice(null);
         };
 
         setSaveState('saving');
@@ -868,9 +881,38 @@ export default function SettingsPage() {
 
   const clearClientProgressStore = () => {
     clearClientStoreKeys(SERVER_PROGRESS_STORE_KEYS);
+    // Sem isto, o aparelho continuaria achando que já enviou o que foi apagado.
+    resetSyncState();
+  };
+
+  const handleSyncNow = async () => {
+    setIsSyncingNow(true);
+    setSyncFeedback(null);
+
+    try {
+      const result = await syncNow({ force: true });
+      if (!result.ok) {
+        setSyncFeedback(result.error ?? 'Não foi possível sincronizar agora.');
+      } else if (result.skipped) {
+        setSyncFeedback('Tudo já estava sincronizado.');
+      } else {
+        const sent = result.pushed.subjects + result.pushed.blocks + result.pushed.snapshots;
+        const received = result.pulled.subjects + result.pulled.blocks + result.pulled.sessions;
+        setSyncFeedback(
+          `Sincronizado: ${sent} enviado(s), ${received} recebido(s) — ${(
+            result.bytesUp / 1024
+          ).toFixed(1)} KB.`
+        );
+      }
+    } finally {
+      setIsSyncingNow(false);
+    }
   };
 
   const clearServerProgress = async (mode: 'onboarding' | 'progress') => {
+    // No modo demo local não existe sessão/banco: limpar apenas o armazenamento local.
+    if (isLocalDemoAuthEnabled) return;
+
     const response = await fetch('/api/progress', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
@@ -903,6 +945,9 @@ export default function SettingsPage() {
     });
     setHasChanges(true);
     setSaveState('idle');
+    setResetNotice(
+      'Campos restaurados para o padrão. Clique em "Salvar alterações" para aplicar — nada muda no seu cronograma antes disso.'
+    );
   };
 
   const startResetTutorialFlow = () => {
@@ -990,7 +1035,7 @@ export default function SettingsPage() {
         return;
       }
 
-      await signOut({ callbackUrl: '/login' });
+      await signOutAndClearProgress();
     } catch (error) {
       setGeneralDangerFeedback({
         type: 'error',
@@ -1039,7 +1084,7 @@ export default function SettingsPage() {
         setDeleteStep('idle');
         setDeleteFeedback({
           type: 'success',
-          message: 'Sessao de teste limpa. Redirecionando...',
+          message: 'Sessão de teste limpa. Redirecionando...',
         });
         setTimeout(() => router.replace('/login'), 350);
         return;
@@ -1151,13 +1196,22 @@ export default function SettingsPage() {
           <p className="text-sm text-text-secondary mt-1">
             Personalize sua experiência de estudos
           </p>
-          {saveFeedback && <p className={cn('mt-2 text-xs', saveFeedback.className)}>{saveFeedback.text}</p>}
+          {resetNotice ? (
+            <p className="mt-2 text-xs text-amber-200/90">{resetNotice}</p>
+          ) : (
+            saveFeedback && <p className={cn('mt-2 text-xs', saveFeedback.className)}>{saveFeedback.text}</p>
+          )}
         </div>
         {showActionButtons && (
           <div className="flex w-full sm:w-auto flex-col sm:flex-row gap-2 sm:gap-3">
-            <Button variant="ghost" onClick={handleReset} className="w-full sm:w-auto">
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Resetar
+            <Button
+              variant="ghost"
+              onClick={handleReset}
+              className="w-full sm:w-auto"
+              title="Volta os campos desta tela aos valores padrão. Só vale depois de salvar."
+            >
+              <RefreshCw className="w-4 h-4 mr-2" aria-hidden="true" />
+              Restaurar padrões
             </Button>
             <Button variant="primary" onClick={handleSave} loading={saving} className="w-full sm:w-auto">
               <Save className="w-4 h-4 mr-2" />
@@ -1360,7 +1414,7 @@ export default function SettingsPage() {
       <Card className={cn(activeSection === 'study' ? 'block' : 'hidden')}>
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 rounded-xl bg-neon-purple/20 flex items-center justify-center">
-            <Clock className="w-5 h-5 text-neon-purple" />
+            <Clock className="w-5 h-5 text-neon-violet" />
           </div>
           <div>
             <h2 className="text-lg font-heading font-bold text-white">
@@ -1556,7 +1610,7 @@ export default function SettingsPage() {
                   className={cn(
                     'w-full h-11 rounded-xl font-medium text-sm transition-all touch-manipulation active:scale-[0.99]',
                     excludeDays.includes(index)
-                      ? 'bg-neon-purple/20 text-neon-purple border border-neon-purple/50'
+                      ? 'bg-neon-purple/20 text-neon-violet border border-neon-purple/50'
                       : 'bg-card-bg text-text-secondary border border-card-border hover:border-neon-purple/30'
                   )}
                 >
@@ -1970,6 +2024,67 @@ export default function SettingsPage() {
         </div>
       </Card>
 
+      {/* Progresso na nuvem */}
+      <Card className={cn(activeSection === 'study' ? 'block' : 'hidden')}>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/25 flex items-center justify-center">
+            <UploadCloud className="w-5 h-5 text-cyan-300" />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-lg font-heading font-bold text-white">Progresso na nuvem</h2>
+            <p className="text-sm text-text-secondary">
+              Envia só o que mudou e mantém celular e computador iguais
+            </p>
+          </div>
+        </div>
+
+        {isLocalDemoAuthEnabled ? (
+          <p className="text-xs sm:text-sm text-text-secondary">
+            No modo demo o progresso fica apenas neste navegador. Entre com uma conta para
+            sincronizar entre aparelhos.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-slate-700/60 bg-slate-900/40 p-3 text-xs sm:text-sm text-text-secondary">
+              {syncStatus?.at ? (
+                <>
+                  Última sincronização:{' '}
+                  <span className="text-white">
+                    {formatDate(new Date(syncStatus.at), 'short')} às{' '}
+                    {new Date(syncStatus.at).toLocaleTimeString('pt-BR', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                  {typeof syncStatus.bytesUp === 'number' && (
+                    <> · {((syncStatus.bytesUp ?? 0) / 1024).toFixed(1)} KB enviados</>
+                  )}
+                  {syncStatus.ok === false && (
+                    <span className="block text-amber-300 mt-1">
+                      {syncStatus.error ?? 'Última tentativa falhou.'}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>Ainda não sincronizou nesta sessão. O envio acontece sozinho a cada alteração.</>
+              )}
+            </div>
+
+            <Button
+              variant="secondary"
+              className="w-full border-cyan-500/35 text-cyan-200 hover:bg-cyan-500/10"
+              onClick={handleSyncNow}
+              loading={isSyncingNow}
+              leftIcon={<RefreshCw className="w-4 h-4" />}
+            >
+              Sincronizar agora
+            </Button>
+
+            {syncFeedback && <p className="text-xs text-text-secondary">{syncFeedback}</p>}
+          </div>
+        )}
+      </Card>
+
       {/* Zona de Perigo */}
       <Card
         className={cn(
@@ -2008,7 +2123,7 @@ export default function SettingsPage() {
             loading={isSigningOut}
             leftIcon={<LogOut className="w-4 h-4" />}
           >
-            Sair da Conta
+            Sair da conta
           </Button>
 
           {resetTutorialStep === 'idle' ? (
@@ -2018,11 +2133,13 @@ export default function SettingsPage() {
               onClick={startResetTutorialFlow}
               leftIcon={<RotateCcw className="w-4 h-4" />}
             >
-              Reiniciar Tutorial
+              Reiniciar tutorial
             </Button>
           ) : (
             <div className="rounded-xl border border-orange-500/25 bg-orange-500/[0.06] p-3 space-y-2">
-              <p className="text-xs text-orange-200/80">Etapa 2 de 2: confirmar reinício do tutorial.</p>
+              <p className="text-xs text-orange-200/80">
+                Etapa 2 de 2: o tutorial volta a aparecer no próximo acesso.
+              </p>
               <div className="grid grid-cols-1 gap-2">
                 <Button
                   variant="ghost"
@@ -2038,8 +2155,9 @@ export default function SettingsPage() {
                   onClick={confirmResetTutorial}
                   loading={isResettingTutorial}
                   leftIcon={<RotateCcw className="w-4 h-4" />}
+                  title="Confirmar reinício do tutorial"
                 >
-                  Confirmar
+                  Confirmar reinício
                 </Button>
               </div>
             </div>
@@ -2052,11 +2170,13 @@ export default function SettingsPage() {
               onClick={startResetProgressFlow}
               leftIcon={<RefreshCw className="w-4 h-4" />}
             >
-              Resetar Todo o Progresso
+              Apagar todo o progresso
             </Button>
           ) : (
             <div className="sm:col-span-2 rounded-xl border border-red-500/25 bg-red-500/[0.06] p-3 space-y-2">
-              <p className="text-xs text-red-200/80">Etapa 2 de 2: confirmar reset do progresso.</p>
+              <p className="text-xs text-red-200/80">
+                Etapa 2 de 2: isso apaga XP, sequência, conquistas e histórico de estudos. Não dá para desfazer.
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <Button
                   variant="ghost"
@@ -2072,8 +2192,9 @@ export default function SettingsPage() {
                   onClick={confirmResetProgress}
                   loading={isResettingProgress}
                   leftIcon={<RefreshCw className="w-4 h-4" />}
+                  title="Confirmar apagamento de todo o progresso"
                 >
-                  Confirmar reset
+                  Apagar tudo
                 </Button>
               </div>
             </div>
@@ -2099,14 +2220,17 @@ export default function SettingsPage() {
 
           {deleteStep === 'idle' ? (
             <>
-              <p className="text-xs text-red-200/80">Etapa 1 de 2: iniciar exclusão da conta.</p>
+              <p className="text-xs text-red-200/80">
+                Etapa 1 de 2: remover a conta e todos os dados ligados a ela.
+              </p>
               <Button
                 variant="danger"
                 className="w-full"
                 onClick={startDeleteFlow}
                 leftIcon={<Trash2 className="w-4 h-4" />}
+                title="Começar a exclusão da conta"
               >
-                Iniciar exclusão
+                Excluir minha conta
               </Button>
             </>
           ) : (
@@ -2142,8 +2266,9 @@ export default function SettingsPage() {
                   onClick={handleDeleteAccount}
                   loading={isDeletingAccount}
                   leftIcon={<Trash2 className="w-4 h-4" />}
+                  title="Excluir a conta e todos os dados"
                 >
-                  Confirmar exclusão
+                  Excluir definitivamente
                 </Button>
               </div>
             </>

@@ -13,6 +13,8 @@ import TopBar from './TopBar';
 import BottomNav from './BottomNav';
 import AppContainer from './AppContainer';
 import RouteWarmup from './RouteWarmup';
+import StorageWarningBanner from './StorageWarningBanner';
+import SyncStatusBanner from './SyncStatusBanner';
 import { useLocalStorage } from '@/hooks';
 import { useServerProgressSync } from '@/hooks/useServerProgressSync';
 import { defaultSettings } from '@/lib/defaultSettings';
@@ -162,6 +164,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
             }}
           />
         </div>
+
+        <StorageWarningBanner />
+        <SyncStatusBanner />
 
         {/* Conteudo da pagina */}
         <main className="app-main-content flex-1 min-h-0 min-w-0 w-full max-w-full overflow-y-auto">

@@ -21,6 +21,12 @@ interface SubjectCardProps {
   subject: Subject;
   onEdit: (subject: Subject) => void;
   onDelete: (subjectId: string) => void;
+  /**
+   * Horas concluídas na semana atual. Antes o card usava `subject.completedHours`
+   * (acumulado de sempre) contra a meta semanal, então a barra enchia e nunca
+   * mais voltava a zero.
+   */
+  weeklyCompletedHours?: number;
 }
 
 const difficultyLabels = ['Muito Fácil', 'Fácil', 'Médio', 'Difícil', 'Muito Difícil'];
@@ -34,8 +40,10 @@ export default function SubjectCard({
   subject,
   onEdit,
   onDelete,
+  weeklyCompletedHours,
 }: SubjectCardProps) {
-  const completionPercent = percentage(subject.completedHours, subject.targetHours);
+  const weekHours = Math.max(0, weeklyCompletedHours ?? 0);
+  const completionPercent = percentage(weekHours, subject.targetHours);
   const difficultyLabel = difficultyLabels[Math.floor((subject.difficulty - 1) / 2)];
   const priorityLabel = getPriorityLabel(subject.priority);
 
@@ -76,16 +84,24 @@ export default function SubjectCard({
           </div>
 
           <div className="flex shrink-0 items-center gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-            <Button variant="ghost" size="sm" onClick={() => onEdit(subject)}>
-              <Edit className="w-4 h-4" />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onEdit(subject)}
+              aria-label={`Editar ${subject.name}`}
+              title={`Editar ${subject.name}`}
+            >
+              <Edit className="w-4 h-4" aria-hidden="true" />
             </Button>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onDelete(subject.id)}
               className="hover:text-red-400"
+              aria-label={`Excluir ${subject.name}`}
+              title={`Excluir ${subject.name}`}
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-4 h-4" aria-hidden="true" />
             </Button>
           </div>
         </div>
@@ -94,11 +110,11 @@ export default function SubjectCard({
           <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
             <span className="min-w-0 text-sm text-text-secondary">Meta da semana</span>
             <span className="shrink-0 text-sm font-medium text-white">
-              {formatHoursDuration(subject.completedHours)} / {formatHoursDuration(subject.targetHours)}
+              {formatHoursDuration(weekHours)} / {formatHoursDuration(subject.targetHours)}
             </span>
           </div>
           <ProgressBar
-            value={subject.completedHours}
+            value={weekHours}
             max={subject.targetHours}
             color={completionPercent >= 100 ? 'cyan' : 'blue'}
             size="md"
@@ -111,7 +127,7 @@ export default function SubjectCard({
               <Clock className="w-3 h-3" />
             </div>
             <p className="truncate text-lg font-bold text-white">{formatHoursDuration(subject.totalHours)}</p>
-            <p className="text-xs text-text-muted">Total</p>
+            <p className="text-xs text-text-muted">Total geral</p>
           </div>
 
           <div className="min-w-0 text-center">
