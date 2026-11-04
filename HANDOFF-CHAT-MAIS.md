@@ -2,7 +2,7 @@ Você está retomando o desenvolvimento do **Nexora** (`mycronograma/meu-cronogr
 
 Leia tudo antes de escrever qualquer código.
 
-**TL;DR:** a branch da sua sessão (`arena/01a0d5b8-meu-cronograma`, PR #1) está apoiada na `main` antiga e **não tem o produto**. Todo o produto está em `arena/01a0d51e-meu-cronograma` (`4550b64`, já no remoto) e há o **PR #2** levando isso para a `main` — que é a *Production Branch* da Vercel. Antes de codar: rebases/merge na base certa (seção 1) e descubra a URL do app oficial (seção 1b). Depois siga as regras do dono do projeto (seção 2).
+**TL;DR:** a branch da sua sessão (`arena/01a0d5b8-meu-cronograma`, PR #1) está apoiada na `main` antiga e **não tem o produto**. Todo o produto está em `arena/01a0d51e-meu-cronograma` (`097c416`, já no remoto) e há o **PR #2** levando isso para a `main` — que é a *Production Branch* da Vercel. **O app oficial é https://my-cronograma.vercel.app/** e, hoje, ele ainda serve a base antiga (`/termos` e `/api/health` respondem 404). Antes de codar: rebases/merge na base certa (seção 1), descubra/fixe a versão oficial (seção 1b) e siga as regras do dono do projeto (seção 2).
 
 ---
 
@@ -51,7 +51,26 @@ Escolha uma das duas formas de alinhar e siga:
 - Vercel → Project → **Deployments** → deployment ativo: o topo mostra "Source: <branch> @ <sha>".
 - Compare com `git rev-parse origin/main` (forma A) ou `git rev-parse origin/<sua branch>` (forma B).
 - O GitHub **não** registra deployments deste projeto (nenhum status check do Vercel nos commits), então a fonte da verdade é o painel da Vercel.
-- Endereço do app oficial: preencha `<URL-OFICIAL>` (Vercel → **Domains**; ou `npx vercel ls` / `npx vercel inspect <url>` se tiver a CLI). **Preencha antes de começar.**
+- Endereço do app oficial: **https://my-cronograma.vercel.app/** (Vercel → Domains; ou `npx vercel ls` / `npx vercel inspect <url>` se tiver a CLI).
+
+### Marcadores objetivos de qual versão está no ar
+
+| Rota | O que está publicado hoje (base antiga `fbefdeb`) | O que passa a existir após o merge do PR #2 |
+|---|---|---|
+| `/login` | "Termos de Uso" e "Política de Privacidade" apontam para `#` | apontam para `/termos` e `/privacidade` |
+| `/termos` | **404** (página de erro do próprio app) | 200 com o texto dos termos |
+| `/privacidade` | **404** | 200 com a política |
+| `/api/health` | **404** (rota não existe) | 200 (ou 503 degradado sem banco) |
+
+Use essa tabela para conferir, a qualquer momento, qual versão está servindo: se `/termos` ainda der 404, a `main` ainda não recebeu o PR #2 e o site está na base antiga.
+
+Obs. de rede: neste sandbox o `curl` para `vercel.app` retorna `000` (sem saída direta para a internet). Para consultar o site no ar, use a ferramenta de busca/fetch da plataforma, que tem acesso (ex.: buscar `https://my-cronograma.vercel.app/termos`).
+
+### O que falta para a produção ficar completa depois do merge
+
+- No deploy novo, `/api/health` precisa responder 200 → isso exige `DATABASE_URL` (CockroachDB) configurado no projeto Vercel.
+- `prisma migrate deploy` roda no build e aplica a migração de sync incremental — o `/api/sync` só funciona com essa migração aplicada.
+- A URL do app está em `NEXTAUTH_URL`; se divergir do domínio real, o login (Google/e-mail) quebra no redirecionamento.
 
 ### Antes de mexer na produção
 - Variáveis de ambiente do projeto Vercel (Production): `DATABASE_URL` (CockroachDB), `NEXTAUTH_URL` (domínio final, ex.: `https://<dominio>.vercel.app`) e `NEXTAUTH_SECRET`. Sem o `NEXTAUTH_URL` correto, o login redireciona errado.
