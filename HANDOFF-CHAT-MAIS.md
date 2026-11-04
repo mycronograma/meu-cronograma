@@ -2,6 +2,8 @@ Você está retomando o desenvolvimento do **Nexora** (`mycronograma/meu-cronogr
 
 Leia tudo antes de escrever qualquer código.
 
+**TL;DR:** a branch da sua sessão (`arena/01a0d5b8-meu-cronograma`, PR #1) está apoiada na `main` antiga e **não tem o produto**. Todo o produto está em `arena/01a0d51e-meu-cronograma` (`4550b64`, já no remoto) e há o **PR #2** levando isso para a `main` — que é a *Production Branch* da Vercel. Antes de codar: rebases/merge na base certa (seção 1) e descubra a URL do app oficial (seção 1b). Depois siga as regras do dono do projeto (seção 2).
+
 ---
 
 ## 1. Situação do git (importante — os dois galhos estão separados)
@@ -22,6 +24,42 @@ Conflitos esperados (ambos mexem nos mesmos arquivos): `src/app/(app)/settings/p
 Boa notícia: o helper novo do teu commit (`src/lib/signOutAndClearProgress.ts`) importa `clearClientStoreKeys` (de `src/hooks/useLocalStorage.ts`) e `SERVER_PROGRESS_STORE_KEYS` (de `src/hooks/useServerProgressSync.ts`) — **as duas funções já existem** em `ecaf9bc`, então o merge deve encaixar sem reescrita. Se o `settings/page.tsx` conflitar, a versão do `ecaf9bc` é a correta (é a que tem a zona de perigo com rótulos finais + tooltips); reaplique só a troca `signOut(...)` → `signOutAndClearProgress()`.
 
 Depois do merge, rode as 9 suítes da seção 4 — se algo quebrar, o problema está no merge, não no código.
+
+Existe também um **PR #2 aberto** (`arena/01a0d51e-meu-cronograma` → `main`) que leva todo o produto para a `main`, que é a branch que a Vercel usa como *Production Branch*: https://github.com/mycronograma/meu-cronograma/pull/2 (estado `MERGEABLE / CLEAN`).
+
+---
+
+## 1b. A versão "oficial" é a que a Vercel está servindo
+
+A Vercel não guarda uma cópia do código: ela **compila a branch configurada como *Production Branch*** do projeto. Logo, "a versão oficial que está rodando" = o commit dessa branch no momento do deploy.
+
+**Situação de hoje:** a *Production Branch* é a `main` (padrão da Vercel), e a `main` ainda está em `fbefdeb` (base antiga) → **o site publicado ainda é a base velha**, não o produto. Todo o produto está em `arena/01a0d51e-meu-cronograma` (`4550b64`).
+
+Escolha uma das duas formas de alinhar e siga:
+
+**Forma A — produção = `main` (recomendada, com PR):**
+1. O dono do projeto mergeia o PR #2 → a `main` passa a ter o produto e a Vercel redeploya sozinha.
+2. Aqui: `git fetch origin && git rebase origin/main` (ou `git merge origin/main`) → a branch desta sessão passa a nascer do código que está no ar.
+3. Trabalho novo → push da branch da sessão → PR para `main` → merge → novo deploy.
+
+**Forma B — a branch desta sessão vira a produção (ciclo mais rápido, sem PR):**
+1. Vercel → Project → Settings → **Git → Production Branch** = a branch desta sessão.
+2. A partir daí, **cada push da branch desta sessão vai direto para produção** (push → deploy automático → conferir no site).
+3. Antes disso, alinhe a base: `git fetch origin && git rebase origin/arena/01a0d51e-meu-cronograma` (traz produto + design + horas + sync; o commit de labels/sign-out reaparece no topo).
+
+### Como conferir qual versão está no ar
+- Vercel → Project → **Deployments** → deployment ativo: o topo mostra "Source: <branch> @ <sha>".
+- Compare com `git rev-parse origin/main` (forma A) ou `git rev-parse origin/<sua branch>` (forma B).
+- O GitHub **não** registra deployments deste projeto (nenhum status check do Vercel nos commits), então a fonte da verdade é o painel da Vercel.
+- Endereço do app oficial: preencha `<URL-OFICIAL>` (Vercel → **Domains**; ou `npx vercel ls` / `npx vercel inspect <url>` se tiver a CLI). **Preencha antes de começar.**
+
+### Antes de mexer na produção
+- Variáveis de ambiente do projeto Vercel (Production): `DATABASE_URL` (CockroachDB), `NEXTAUTH_URL` (domínio final, ex.: `https://<dominio>.vercel.app`) e `NEXTAUTH_SECRET`. Sem o `NEXTAUTH_URL` correto, o login redireciona errado.
+- `npm run vercel-build` executa `prisma generate` → `prisma migrate deploy` → `next build`: **toda mudança em `prisma/schema.prisma` exige migration** (`prisma/migrations/<timestamp>_<nome>/migration.sql`, SQL estilo CockroachDB — coluna `NOT NULL` nova em tabela não-vazia precisa de `DEFAULT`). Sem a migration, a build de produção quebra.
+- O Prisma CLI não roda offline no sandbox: migration é escrita à mão e revisada.
+- Depois do deploy: `/api/health` (200 com banco, 503 degradado sem), `/api/sync` (401 sem sessão — esperado), `/login`, `/register`, `/planner` (exige sessão).
+- **Produção não tem o bypass de demo**: `NEXT_PUBLIC_LOCAL_DEMO_MODE` só vale em dev (`.env.local`, gitignored). Não teste a produção esperando entrar sem login.
+- Para reproduzir localmente igual à produção: copie as env vars do projeto Vercel para o `.env.local` (fora do git) e rode `npx next dev -H 0.0.0.0 -p 3111`.
 
 ---
 
