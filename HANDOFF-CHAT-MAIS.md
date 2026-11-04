@@ -1,0 +1,118 @@
+Você está retomando o desenvolvimento do **Nexora** (`mycronograma/meu-cronograma`) — app de cronograma de estudos para estudantes (ENEM/concursos), em português do Brasil. Stack: Next.js 15 (App Router) + TypeScript + Tailwind + NextAuth + Prisma (CockroachDB) + framer-motion. Deploy previsto na Vercel.
+
+Leia tudo antes de escrever qualquer código.
+
+---
+
+## 1. Situação do git (importante — os dois galhos estão separados)
+
+- `main` = `fbefdeb` "Initial commit" — **só a base**, quase nada de produto pronto.
+- `arena/01a0d51e-meu-cronograma` = `ecaf9bc` — **todo o trabalho de produto já feito** (ver seção 3). Está no remoto.
+- `arena/01a0d5b8-meu-cronograma` (a branch da sessão que você está, PR #1 aberto) = `a3f99d8` "Fix study block labels and clear local progress on sign-out" — **baseado no `main` antigo**, portanto **não contém nenhuma** das correções da seção 3.
+
+**Primeiro passo obrigatório:** integre o branch de produto no seu. Duas opções (escolha a que couber na sua branch de sessão):
+
+```bash
+git fetch origin
+git merge origin/arena/01a0d51e-meu-cronograma   # ou: git rebase origin/arena/01a0d51e-meu-cronograma
+```
+
+Conflitos esperados (ambos mexem nos mesmos arquivos): `src/app/(app)/settings/page.tsx`, `src/types/index.ts`, `src/components/planner/TimeBlock.tsx`, `src/lib/studyBlockLabels.ts`, `package.json`.
+
+Boa notícia: o helper novo do teu commit (`src/lib/signOutAndClearProgress.ts`) importa `clearClientStoreKeys` (de `src/hooks/useLocalStorage.ts`) e `SERVER_PROGRESS_STORE_KEYS` (de `src/hooks/useServerProgressSync.ts`) — **as duas funções já existem** em `ecaf9bc`, então o merge deve encaixar sem reescrita. Se o `settings/page.tsx` conflitar, a versão do `ecaf9bc` é a correta (é a que tem a zona de perigo com rótulos finais + tooltips); reaplique só a troca `signOut(...)` → `signOutAndClearProgress()`.
+
+Depois do merge, rode as 9 suítes da seção 4 — se algo quebrar, o problema está no merge, não no código.
+
+---
+
+## 2. Decisões do dono do projeto (respeite; não rever sem perguntar)
+
+1. **Falar/responder sempre em português.**
+2. **Ordem de implementação escolhida:** camada de dados **server-side primeiro**, assinatura (billing) **depois**.
+3. **Gateway de pagamento: Mercado Pago**, com abstração de provedor para permitir trocar por outro depois.
+4. Qualidade do app é requisito de aceite, não extra: deve estar **"visivelmente agradável", sem confusões de botões, sem lógicas quebradas e com os cálculos de horas conferidos e corretos**.
+5. O produto deve ser avaliado do ponto de vista de **um estudante que usa o app continuamente por ~1 ano** (sessões longas, acúmulo de dados, progresso real).
+6. Fluxo do agente: trabalhar só na branch da sessão, commitar em português, dar push para a branch da sessão, abrir PR com `gh`. Nunca mexer em branches de outra sessão.
+
+---
+
+## 3. O que já está pronto (branch `ecaf9bc`, 7 commits)
+
+| Commit | Entrega |
+|---|---|
+| `9756cb4` | Caça a bugs de um ano de uso → `RELATORIO-BUGS.md` (simulação de 1 ano: 2754 blocos, 1383 concluídos, 203 pulados, XP 54420, streak 307, 8 conquistas, store 3.320 KB, **0 anomalias**) |
+| `7158034` | Plano de assinatura → `PLANO-SUBSCRICAO.md` (modelos Free/Pro/anual/Escola, `src/lib/entitlements.ts`, trial 7 dias → checkout → webhook idempotente → portal + dunning) |
+| `89205fb` | **Camada de dados server-side**: Prisma schema + migração de sync incremental, `src/lib/{syncDelta,syncServer,clientSync}.ts`, `POST/GET /api/sync`, `GET /api/health`, `src/hooks/useServerProgressSync.ts` |
+| `8821e97` | Design/UX: contraste AA, `prefers-reduced-motion`, foco de teclado visível, banner de falha de sync, tokens em `globals.css`/`tailwind.config.ts` |
+| `6fd3fac` | Microcopy: acentos e textos visíveis corrigidos (auth, planejador, gamificação) |
+| `ecaf9bc` | **Auditoria de horas** + **botões sem ambiguidade** + regras de reagendamento testadas + `/termos` + `/privacidade` + analytics (heatmap com seletor de período + card "Horário de maior rendimento") |
+
+Detalhe do último commit (é o que mais toca no teu branch):
+
+- `src/lib/plannerRules.ts` (novo) concentra as regras: `isLockedScheduleBlock` (concluído/em andamento **nunca** é movido nem perde status), `isPendingStudyBlock`, `isCapacityStudyBlock`, `selectReschedulableBlocks`, `sumStudyMinutes`, `selectOverflowBlocks`, `buildRescheduledBlock`, `getBlockDurationMinutes`. O `WeeklyPlanner` consome esse módulo nos dois caminhos de movimentação.
+- **Botões:** vocabulário separado — "mover" = você escolhe o dia ("Mover estudos de dia", "Mover este estudo", "Mover" na linha), "replanejar" = o app decide ("Replanejar automaticamente", só o automático). As antigas "Reagendar pendências"/"Reagendar manualmente" sumiram. Zona de perigo: "Apagar todo o progresso" → "Apagar tudo"; "Reiniciar tutorial" → "Confirmar reinício"; "Excluir minha conta" → "Excluir definitivamente".
+- **Horas:** `src/lib/utils.ts` passou a devolver minutos exatos ("48 min", "1:48") — nunca reintroduzir arredondamento legado (dava "50 min" para 48 min e "1:50" para 108 min). Datas/dias em pt-BR; formato 24h; inválido → "0 min". A "meta da semana" das disciplinas compara só as horas da semana (`buildWeeklyCompletedHoursBySubject` em `src/lib/progressSnapshot.ts`), não o total histórico.
+- Páginas legais novas: `src/app/termos/page.tsx`, `src/app/privacidade/page.tsx` + `src/components/legal/LegalPage.tsx` (o login tinha `href="#"`).
+
+O teu commit `a3f99d8` (rótulos de blocos + limpar progresso local ao sair) **complementa** isso e não conflita conceitualmente: ele impede que a próxima conta logada no mesmo navegador herde os dados de estudo do usuário anterior, e ajusta a ordem das chaves `REVISAO_ATIVA` nos mapas de rótulo (para manter a ordem canônica de `src/types/index.ts`, onde `REVISAO_ATIVA` ficou marcado como legado do gerador semanal antigo).
+
+---
+
+## 4. Como verificar (obrigatório antes de dizer que terminou)
+
+```bash
+npm run test:hours        # auditoria de horas/horários sobre o motor real
+npm run test:ui           # acessibilidade de botões + tokens de contraste
+npm run test:sync         # delta de sync no servidor
+npm run test:sync-client  # motor de sync no cliente
+npm run test:roadmap
+npm run test:student-audit
+npm run test:backlog
+npm run test:gamification
+npm run test:year-simulation
+npx next lint && npx tsc --noEmit
+```
+
+Estado atual: as 9 suítes passam, `next lint` limpo, `tsc` limpo. O `test:ui` reportou "0 botões só com ícone sem nome acessível (de 54 arquivos analisados)".
+
+Para ver rodando: `npx next dev -H 0.0.0.0 -p 3111`. Em dev, as rotas `(app)` redirecionam para `/login` **a menos** que exista `.env.local` (gitignored) com `NEXT_PUBLIC_LOCAL_DEMO_MODE="true"` — sem isso você não consegue navegar no planner. Smoke testado: `/planner`, `/settings`, `/subjects`, `/dashboard`, `/analytics` → 200, `/` → 307 para `/dashboard`.
+
+---
+
+## 5. Armadilhas conhecidas (não repita o erro)
+
+- **O repositório pode ser reclonado silenciosamente entre sessões** (o HEAD volta para `fbefdeb` "Initial commit"). Se isso acontecer: `git fetch origin 'refs/heads/<branch>:refs/remotes/origin/<branch>'` + `git reset --mixed origin/<branch>` — a árvore de trabalho é preservada. Nunca reclone nem refaça o trabalho.
+- **Prisma CLI não funciona offline**: nunca rode `prisma generate`/`migrate`. Migração foi escrita à mão, em SQL estilo CockroachDB (`NOT NULL` em tabela não-vazia precisa de `DEFAULT`).
+- **`npx next build` falha** em `src/app/api/auth/delete-account/route.ts:22` (`Prisma.PrismaClientKnownRequestError` — client Prisma gerado desatualizado). O `tsc` não acusa. Build na Vercel ou corrija essa linha.
+- `npm install` reescreve o `package-lock.json` (campos `libc`) → depois `git checkout package-lock.json`.
+- Se `node_modules` sumir: `npm install --no-audit --no-fund` (a falha do `prisma generate` no postinstall é esperada e não é fatal).
+- **Playwright/Docker indisponíveis** no sandbox — o `test:trainer-dashboard` e o `test:e2e:check` (teu) não rodam aqui; servem só como detector de pré-requisitos.
+- Ao rodar smoke test logo depois de um `next build`, espere e refaça (o `.next` é reescrito e o dev server reinicia) — 500/000 falsos não são bug do app.
+- Nunca passar um bloco já concluído para `calculateTrainerCompletionReward`.
+- No `tsx` em CommonJS, usar `async function main()`; scripts de `/tmp` precisam de import absoluto.
+
+---
+
+## 6. Próximo passo combinado
+
+A assinatura (billing) é a próxima frente, conforme o `PLANO-SUBSCRICAO.md` §2.2: **Mercado Pago** atrás de `src/lib/billing/provider.ts` (abstração de provedor), com trial de 7 dias → checkout → webhook idempotente → portal do cliente + dunning. A camada de dados server-side (§2.1) já está pronta e é a base disso.
+
+Modelos de preço já definidos no plano: Free (2 disciplinas / 7 dias de histórico) · Pro R$ 24,90–34,90/mês · anual R$ 197–249 · Escola R$ 9–15 por aluno.
+
+Antes de começar a implementar, confirme com o dono do projeto o que ele quer atacar primeiro nessa frente e leia `PLANO-SUBSCRICAO.md` e `RELATORIO-BUGS.md` (em português, na raiz do repo).
+
+---
+
+## 7. Arquivos que importam
+
+- `src/lib/plannerRules.ts` — regras de agendamento/reagendamento (fonte da verdade)
+- `src/lib/progressSnapshot.ts` — `buildWeeklyCompletedHoursBySubject` (horas da semana)
+- `src/lib/utils.ts` — formatação de duração/data/hora (minutos exatos, pt-BR)
+- `src/lib/clientSync.ts`, `src/lib/syncDelta.ts`, `src/lib/syncServer.ts` — motor de sync (cliente/servidor/delta)
+- `src/hooks/useServerProgressSync.ts` — `SERVER_PROGRESS_STORE_KEYS`, evento `nexora-sync-status`
+- `src/components/planner/WeeklyPlanner.tsx` — planejador semanal (botões "Mover"/"Replanejar")
+- `src/app/(app)/settings/page.tsx` — zona de perigo (rótulos finais)
+- `src/types/index.ts` — `StudyBlockType` (inclui simulados), `Subject.studyPrefs?`
+- `prisma/schema.prisma` + `prisma/migrations/20260924120000_add_incremental_sync_fields/migration.sql`
+- `scripts/` — `hours-audit.test.ts`, `ui-audit.test.ts`, `sync-delta.test.ts`, `client-sync.test.ts`, `year-simulation.test.ts`, `roadmap.test.ts`, `student-product-audit.test.ts`, `backlog-rescheduler.test.ts`, `gamification.test.ts`, `helpers/memoryPrisma.ts`
+- Docs: `PLANO-SUBSCRICAO.md`, `RELATORIO-BUGS.md`, `README.md` (tabela de suítes), `COMO_USAR.md`, `SETUP_VERCEL.md`
