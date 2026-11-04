@@ -30,7 +30,9 @@
     "test:sync-client": "tsx scripts/client-sync.test.ts",
     "test:ui": "tsx scripts/ui-audit.test.ts",
     "test:hours": "tsx scripts/hours-audit.test.ts",
-    "test:trainer-dashboard": "playwright test scripts/trainer-dashboard-audit.spec.cjs --reporter=line"
+    "test:trainer-dashboard": "playwright test scripts/trainer-dashboard-audit.spec.cjs --reporter=line",
+    "test:e2e:check": "node scripts/check-e2e-prerequisites.cjs",
+    "test:signout": "tsx scripts/sign-out-audit.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",
