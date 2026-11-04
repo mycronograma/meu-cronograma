@@ -2,30 +2,38 @@ Você está retomando o desenvolvimento do **Nexora** (`mycronograma/meu-cronogr
 
 Leia tudo antes de escrever qualquer código.
 
-**TL;DR:** a branch da sua sessão (`arena/01a0d5b8-meu-cronograma`, PR #1) está apoiada na `main` antiga e **não tem o produto**. Todo o produto está em `arena/01a0d51e-meu-cronograma` (`097c416`, já no remoto) e há o **PR #2** levando isso para a `main` — que é a *Production Branch* da Vercel. **O app oficial é https://my-cronograma.vercel.app/** e, hoje, ele ainda serve a base antiga (`/termos` e `/api/health` respondem 404). Antes de codar: rebases/merge na base certa (seção 1), descubra/fixe a versão oficial (seção 1b) e siga as regras do dono do projeto (seção 2).
+**TL;DR:** existe agora uma **terceira versão** (branch `arena/01a0d51e-meu-cronograma`, `6f19f1a`, já no remoto) que contém **tudo**: o produto inteiro (dados server-side, design, horas conferidas, botões sem ambiguidade, páginas legais) **e** o trabalho do branch antigo (rótulos de bloco + limpeza de progresso ao sair da conta). O PR **#2** leva essa versão para a `main` — que é a *Production Branch* da Vercel. **O app oficial é https://my-cronograma.vercel.app/** e, hoje, ele ainda serve a base antiga (`/termos` e `/api/health` respondem 404). Antes de codar: alinhe a base com a versão certa (seção 1) e siga as regras do dono do projeto (seção 2).
 
 ---
 
-## 1. Situação do git (importante — os dois galhos estão separados)
+## 1. Situação do git (importante — os dois galhos foram unidos)
 
 - `main` = `fbefdeb` "Initial commit" — **só a base**, quase nada de produto pronto.
-- `arena/01a0d51e-meu-cronograma` = `ecaf9bc` — **todo o trabalho de produto já feito** (ver seção 3). Está no remoto.
-- `arena/01a0d5b8-meu-cronograma` (a branch da sessão que você está, PR #1 aberto) = `a3f99d8` "Fix study block labels and clear local progress on sign-out" — **baseado no `main` antigo**, portanto **não contém nenhuma** das correções da seção 3.
+- `arena/01a0d51e-meu-cronograma` = `6f19f1a` — **a terceira versão**: produto inteiro **+** o trabalho do branch antigo, já mergeado e testado (ver seção 3).
+- `arena/01a0d5b8-meu-cronograma` (a branch da sessão que você está, PR #1) = `a3f99d8` — o commit "Fix study block labels and clear local progress on sign-out" **já está dentro da terceira versão**.
 
-**Primeiro passo obrigatório:** integre o branch de produto no seu. Duas opções (escolha a que couber na sua branch de sessão):
+**Primeiro passo obrigatório:** alinhe a base da sua branch com a versão certa.
 
 ```bash
 git fetch origin
-git merge origin/arena/01a0d51e-meu-cronograma   # ou: git rebase origin/arena/01a0d51e-meu-cronograma
+git rebase origin/arena/01a0d51e-meu-cronograma   # ou, depois do PR #2 mergeado: git rebase origin/main
 ```
 
-Conflitos esperados (ambos mexem nos mesmos arquivos): `src/app/(app)/settings/page.tsx`, `src/types/index.ts`, `src/components/planner/TimeBlock.tsx`, `src/lib/studyBlockLabels.ts`, `package.json`.
+O que a terceira versão já contém do teu commit (nada se perdeu):
+- `src/lib/signOutAndClearProgress.ts` — helper de saída com limpeza de progresso (usado no `TopBar` e em "Sair da conta" das Configurações).
+- Rótulos de bloco na ordem canônica (`REVISAO_ATIVA` por último, igual em `src/types/index.ts`, `src/lib/studyBlockLabels.ts` e `src/components/planner/TimeBlock.tsx`).
+- `scripts/check-e2e-prerequisites.cjs` + `npm run test:e2e:check`.
 
-Boa notícia: o helper novo do teu commit (`src/lib/signOutAndClearProgress.ts`) importa `clearClientStoreKeys` (de `src/hooks/useLocalStorage.ts`) e `SERVER_PROGRESS_STORE_KEYS` (de `src/hooks/useServerProgressSync.ts`) — **as duas funções já existem** em `ecaf9bc`, então o merge deve encaixar sem reescrita. Se o `settings/page.tsx` conflitar, a versão do `ecaf9bc` é a correta (é a que tem a zona de perigo com rótulos finais + tooltips); reaplique só a troca `signOut(...)` → `signOutAndClearProgress()`.
+**Dois NÃO:**
 
-Depois do merge, rode as 9 suítes da seção 4 — se algo quebrar, o problema está no merge, não no código.
+1. **O merge deixou chaves duplicadas** (`REVISAO_ATIVA` duas vezes) em `studyBlockLabels.ts` e `TimeBlock.tsx` — já corrigido na terceira versão (`6f19f1a`). Se ao rebasear você ver `TS1117: An object literal cannot have multiple properties with the same name`, é sinal de que pegou a versão intermediária: pegue `6f19f1a`.
+2. **O helper de logout foi completado** (ainda é a mesma função, com o mesmo nome e o mesmo propósito): agora ele também reseta o cursor do sync (`resetSyncState()`) e limpa `nexora_pending_reviews` / `nexora_backlog_notification_day`. Sem isso, a próxima conta que entrasse no mesmo navegador herdaria o cursor da conta anterior. Há teste guarding isso: `npm run test:signout`.
 
-Existe também um **PR #2 aberto** (`arena/01a0d51e-meu-cronograma` → `main`) que leva todo o produto para a `main`, que é a branch que a Vercel usa como *Production Branch*: https://github.com/mycronograma/meu-cronograma/pull/2 (estado `MERGEABLE / CLEAN`).
+Depois de alinhar a base, rode as 10 suítes da seção 4 — se algo quebrar, o problema está na base, não no teu código.
+
+Existe também o **PR #2 aberto** (`arena/01a0d51e-meu-cronograma` → `main`) com a terceira versão completa — é ele que leva o app para a Vercel: https://github.com/mycronograma/meu-cronograma/pull/2.
+
+**Se você tem alterações novas do Antigravity ainda só na sua máquina** (não commitadas nesse branch): faça commit e push para `arena/01a0d5b8-meu-cronograma` e avise — eu faço o merge de novo em cima da terceira versão e revalido tudo.
 
 ---
 
@@ -120,6 +128,7 @@ O teu commit `a3f99d8` (rótulos de blocos + limpar progresso local ao sair) **c
 ```bash
 npm run test:hours        # auditoria de horas/horários sobre o motor real
 npm run test:ui           # acessibilidade de botões + tokens de contraste
+npm run test:signout      # toda chave de usuário é apagada ao sair da conta
 npm run test:sync         # delta de sync no servidor
 npm run test:sync-client  # motor de sync no cliente
 npm run test:roadmap
@@ -130,7 +139,7 @@ npm run test:year-simulation
 npx next lint && npx tsc --noEmit
 ```
 
-Estado atual: as 9 suítes passam, `next lint` limpo, `tsc` limpo. O `test:ui` reportou "0 botões só com ícone sem nome acessível (de 54 arquivos analisados)".
+Estado atual: as 10 suítes passam, `next lint` limpo, `tsc` sem erros novos (os 33 restantes são do client Prisma não gerado por falta de rede no sandbox — na Vercel o `prisma generate` roda antes do build e eles somem; o mesmo `tsc` no commit anterior ao merge dá exatamente os mesmos 33). O `test:ui` reportou "0 botões só com ícone sem nome acessível (de 54 arquivos analisados)".
 
 Para ver rodando: `npx next dev -H 0.0.0.0 -p 3111`. Em dev, as rotas `(app)` redirecionam para `/login` **a menos** que exista `.env.local` (gitignored) com `NEXT_PUBLIC_LOCAL_DEMO_MODE="true"` — sem isso você não consegue navegar no planner. Smoke testado: `/planner`, `/settings`, `/subjects`, `/dashboard`, `/analytics` → 200, `/` → 307 para `/dashboard`.
 
